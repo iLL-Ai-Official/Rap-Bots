@@ -148,8 +148,11 @@ export const users = pgTable("users", {
   openaiApiKey: varchar("openai_api_key"), // User's encrypted OpenAI API key
   groqApiKey: varchar("groq_api_key"), // User's encrypted Groq API key
   elevenlabsApiKey: varchar("elevenlabs_api_key"), // User's encrypted ElevenLabs API key
-  myshellApiKey: varchar("myshell_api_key"), // User's encrypted MyShell AI API key
-  preferredTtsService: varchar("preferred_tts_service").default("myshell"), // "openai", "groq", "elevenlabs", "myshell", "system"
+  preferredTtsService: varchar("preferred_tts_service").default("elevenlabs"), // "openai", "groq", "elevenlabs", "system"
+  bio: text("bio"), // User's bio/description
+  rapStyle: varchar("rap_style"), // User's rap style (e.g., "aggressive", "smooth", "technical")
+  characterCardUrl: varchar("character_card_url"), // URL to generated character card image
+  characterCardData: jsonb("character_card_data").$type<CharacterCardData>(), // Character card metadata
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -333,3 +336,25 @@ export const insertWebhookEventSchema = createInsertSchema(processedWebhookEvent
 
 export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;
 export type ProcessedWebhookEvent = typeof processedWebhookEvents.$inferSelect;
+
+// Character card types
+export interface CharacterCardData {
+  name: string;
+  rapStyle: string;
+  bio: string;
+  attacks: Attack[];
+  stats: {
+    flow: number;
+    wordplay: number;
+    delivery: number;
+    stage_presence: number;
+  };
+  generatedAt: Date;
+}
+
+export interface Attack {
+  name: string;
+  power: number;
+  description: string;
+  type: string; // e.g., "lyrical", "flow", "punchline"
+}

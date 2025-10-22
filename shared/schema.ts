@@ -298,19 +298,19 @@ export const SUBSCRIPTION_TIERS = {
     name: "Free",
     price: 0,
     battlesPerDay: 3,
-    features: ["3 battles per day", "Basic AI opponents", "Standard voices"]
+    features: ["3 battles per day", "Basic AI opponents", "Standard voices", "Ads supported", "Watch ads for free battles"]
   },
   premium: {
     name: "Premium",
     price: 9.99,
     battlesPerDay: 25,
-    features: ["25 battles per day", "Advanced AI opponents", "Premium voices", "Battle analysis", "No ads"]
+    features: ["25 battles per day", "Advanced AI opponents", "Premium voices", "Battle analysis", "No ads", "Clone battles unlimited"]
   },
   pro: {
     name: "Pro",
     price: 19.99,
     battlesPerDay: -1, // unlimited
-    features: ["Unlimited battles", "All AI opponents", "Custom voices", "Advanced analytics", "Priority support", "Tournament mode"]
+    features: ["Unlimited battles", "All AI opponents", "Custom voices", "Advanced analytics", "Priority support", "Tournament mode", "No ads", "Clone battles unlimited", "Sponsor clone battles"]
   }
 } as const;
 

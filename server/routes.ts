@@ -718,6 +718,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Ad impression analytics tracking
+  app.post('/api/analytics/ad-impression', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { adType, battleId, revenue, clicked } = req.body;
+
+      // Log ad impression for analytics
+      console.log(`📊 Ad Impression: ${adType}`, {
+        userId,
+        battleId,
+        revenue: revenue || 0,
+        clicked: clicked || false,
+        timestamp: new Date().toISOString()
+      });
+
+      // In production, store this in analytics database
+      // For now, just acknowledge receipt
+      res.json({ success: true, message: 'Ad impression tracked' });
+    } catch (error) {
+      console.error("Error tracking ad impression:", error);
+      res.status(500).json({ message: "Failed to track ad impression" });
+    }
+  });
+
+  // Reward user for watching ad
+  app.post('/api/rewards/watch-ad', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { rewardType, rewardAmount } = req.body;
+
+      if (rewardType === 'battle' || rewardType === 'battles') {
+        // Award free battle(s) for watching ad
+        const battles = rewardType === 'battle' ? 1 : rewardAmount;
+        await storage.addUserBattles(userId, battles);
+        
+        console.log(`🎁 Rewarded user ${userId} with ${battles} battle(s) for watching ad`);
+        
+        res.json({ 
+          success: true, 
+          battlesAdded: battles,
+          message: `Added ${battles} battle(s) to your account!` 
+        });
+      } else if (rewardType === 'credits') {
+        // Award store credit for watching ad
+        const user = await storage.getUser(userId);
+        if (!user) {
+          return res.status(404).json({ message: 'User not found' });
+        }
+        
+        const currentCredit = parseFloat(user.storeCredit || '0');
+        const newCredit = (currentCredit + rewardAmount).toFixed(2);
+        await storage.updateUser(userId, { storeCredit: newCredit });
+        
+        console.log(`🎁 Rewarded user ${userId} with $${rewardAmount} credit for watching ad`);
+        
+        res.json({ 
+          success: true, 
+          creditAdded: rewardAmount,
+          newBalance: newCredit,
+          message: `Added $${rewardAmount} to your account!` 
+        });
+      } else {
+        res.status(400).json({ message: 'Invalid reward type' });
+      }
+    } catch (error) {
+      console.error("Error processing ad reward:", error);
+      res.status(500).json({ message: "Failed to process ad reward" });
+    }
+  });
+
   // Protected battle creation with subscription checks
   app.post("/api/battles", isAuthenticated, async (req: any, res) => {
     try {

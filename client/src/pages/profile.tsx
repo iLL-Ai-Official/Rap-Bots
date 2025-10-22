@@ -18,6 +18,7 @@ interface Profile {
   rapStyle?: string;
   totalBattles: number;
   totalWins: number;
+  storeCredit?: string;
   characterCardUrl?: string;
   characterCardData?: {
     name: string;
@@ -135,14 +136,29 @@ export default function ProfilePage() {
       });
 
       if (response.ok) {
+        const result = await response.json();
+        const costMsg = result.cost > 0 
+          ? `Card generated! Cost: $${result.cost.toFixed(2)}. New balance: $${result.newBalance.toFixed(2)}`
+          : "First card generated for FREE!";
+        
         toast({
           title: "Success",
-          description: "Character card generated!",
+          description: costMsg,
         });
         fetchProfile();
       } else {
         const error = await response.json();
-        throw new Error(error.message);
+        
+        // Handle insufficient credits
+        if (response.status === 402) {
+          toast({
+            title: "Insufficient Credits",
+            description: error.message,
+            variant: "destructive",
+          });
+        } else {
+          throw new Error(error.message);
+        }
       }
     } catch (error: any) {
       console.error("Error generating card:", error);
@@ -281,6 +297,21 @@ export default function ProfilePage() {
                 </div>
               </div>
 
+              {/* Store Credit Balance */}
+              {isOwnProfile && (
+                <div className="pt-4 border-t border-gray-700">
+                  <div className="text-center">
+                    <div className="text-sm text-gray-400 mb-1">Store Credit</div>
+                    <div className="text-2xl font-bold text-yellow-400">
+                      ${parseFloat(profile.storeCredit || '0').toFixed(2)}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Card generation: $0.50 (first free!)
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Action Buttons */}
               {isOwnProfile && (
                 <div className="flex gap-2 pt-4">
@@ -413,7 +444,7 @@ export default function ProfilePage() {
                       ) : (
                         <>
                           <Sparkles className="w-4 h-4 mr-2" />
-                          Regenerate Card
+                          {profile.characterCardUrl ? 'Regenerate Card ($0.50)' : 'Generate Card (FREE)'}
                         </>
                       )}
                     </Button>
@@ -423,22 +454,27 @@ export default function ProfilePage() {
                 <div className="text-center py-8 space-y-4">
                   <p className="text-gray-400">No character card yet</p>
                   {isOwnProfile && (
-                    <Button
-                      onClick={handleGenerateCard}
-                      disabled={generating}
-                    >
-                      {generating ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-4 h-4 mr-2" />
-                          Generate Character Card
-                        </>
-                      )}
-                    </Button>
+                    <>
+                      <p className="text-sm text-yellow-400">
+                        Your first card is FREE!
+                      </p>
+                      <Button
+                        onClick={handleGenerateCard}
+                        disabled={generating}
+                      >
+                        {generating ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            Generate Character Card
+                          </>
+                        )}
+                      </Button>
+                    </>
                   )}
                 </div>
               )}

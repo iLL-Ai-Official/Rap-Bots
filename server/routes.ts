@@ -1644,6 +1644,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         rapStyle: user.rapStyle,
         totalBattles: user.totalBattles,
         totalWins: user.totalWins,
+        storeCredit: user.storeCredit,
         characterCardUrl: user.characterCardUrl,
         characterCardData: user.characterCardData,
         createdAt: user.createdAt,
@@ -1702,6 +1703,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'User not found' });
       }
 
+      // Check if this is first card generation (free) or regeneration (costs credits)
+      const isFirstCard = !user.characterCardUrl;
+      const CARD_GENERATION_COST = 0.50; // $0.50 per card generation after first
+
+      if (!isFirstCard) {
+        const currentCredit = parseFloat(user.storeCredit || '0');
+        if (currentCredit < CARD_GENERATION_COST) {
+          return res.status(402).json({ 
+            message: `Insufficient credits. Card generation costs $${CARD_GENERATION_COST.toFixed(2)}. Your balance: $${currentCredit.toFixed(2)}`,
+            required: CARD_GENERATION_COST,
+            balance: currentCredit,
+          });
+        }
+      }
+
       // Get image from upload or use profile image
       let imageBuffer: Buffer;
       if (req.file?.buffer) {
@@ -1735,13 +1751,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       );
 
+      // Deduct credits if not first card
+      if (!isFirstCard) {
+        const currentCredit = parseFloat(user.storeCredit || '0');
+        const newCredit = (currentCredit - CARD_GENERATION_COST).toFixed(2);
+        await storage.updateUser(userId, { storeCredit: newCredit });
+        console.log(`💳 Charged ${userId} $${CARD_GENERATION_COST} for card generation. New balance: $${newCredit}`);
+      } else {
+        console.log(`🎁 First card generation for ${userId} - FREE!`);
+      }
+
       // Update user with character card data
       await storage.updateUser(userId, {
         characterCardUrl: result.cardUrl,
         characterCardData: result.cardData,
       });
 
-      res.json(result);
+      res.json({
+        ...result,
+        cost: isFirstCard ? 0 : CARD_GENERATION_COST,
+        newBalance: isFirstCard ? parseFloat(user.storeCredit || '0') : parseFloat(user.storeCredit || '0') - CARD_GENERATION_COST,
+      });
     } catch (error) {
       console.error('Error generating character card:', error);
       res.status(500).json({ message: 'Failed to generate character card' });

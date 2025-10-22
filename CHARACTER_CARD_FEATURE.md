@@ -58,8 +58,15 @@ Stats scale with:
    - A bio (helps generate better attacks)
    - Selected a rap style
 3. Click "Generate Character Card"
+   - **First card is FREE!**
+   - Regenerations cost $0.50 in store credits
 4. Wait a few seconds for generation
 5. Your card will appear with all stats and attacks
+
+### Earning Credits
+- Earn $1.00 for each successful referral
+- Purchase battles or subscriptions
+- Credits can be used for card regenerations
 
 ### Viewing Other Profiles
 Navigate to `/profile/:userId` to view any user's profile and character card.
@@ -89,6 +96,7 @@ Response:
   "rapStyle": "aggressive",
   "totalBattles": 25,
   "totalWins": 18,
+  "storeCredit": "5.00",
   "characterCardUrl": "/api/character-cards/...",
   "characterCardData": {
     "name": "John Doe",
@@ -110,6 +118,10 @@ Request (multipart/form-data):
 
 #### POST /api/generate-character-card
 Generate a character card (requires authentication).
+
+**Pricing:**
+- First card: FREE
+- Regenerations: $0.50 in store credits
 
 Request (multipart/form-data):
 - `image`: file (optional, uses profile image if not provided)
@@ -136,13 +148,15 @@ Response:
       "delivery": 80,
       "stage_presence": 72
     }
-  }
+  },
+  "cost": 0.50,
+  "newBalance": 4.50
 }
 ```
 
 ## Future Enhancements
 
-### Hugging Face Integration
+### Enhanced Visual Generation
 The current implementation saves the user's image directly. Future versions can use Hugging Face's Stable Diffusion Inpainting model to:
 - Apply artistic effects to the image
 - Add Pokemon-style borders and effects
@@ -153,11 +167,13 @@ To enable HF integration:
 2. The service will automatically use the inpainting model
 3. Cards will have enhanced visual effects
 
-### Credits System
-Future implementation can require credits to generate cards:
-- Initial card: Free
-- Regeneration: Costs credits
-- Premium users: Unlimited regenerations
+### Additional Features
+- Card trading/sharing system
+- Card rarity tiers (common, rare, legendary)
+- Special event cards
+- Animated card effects
+- Card collection gallery
+- Leaderboards for best cards
 
 ## Notes
 - Character cards are stored in `temp_cards/` directory

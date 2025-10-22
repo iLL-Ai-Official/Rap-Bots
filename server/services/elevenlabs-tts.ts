@@ -1,29 +1,22 @@
 import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
-import * as fs from 'fs';
-import * as path from 'path';
+import fs from 'fs';
+import path from 'path';
 
 export interface ElevenLabsTTSOptions {
   apiKey: string;
   voiceStyle?: 'aggressive' | 'confident' | 'smooth' | 'intense' | 'playful';
   characterGender?: 'male' | 'female';
-  useTurboModel?: boolean; // Use faster Turbo models for real-time battles
-  pronunciationDictId?: string; // Custom pronunciation dictionary for rap slang
 }
 
 export class ElevenLabsTTSService {
   private elevenlabs: ElevenLabsClient;
   private outputDir: string;
   private voiceCache = new Map<string, any>();
-  private useTurboModel: boolean;
-  private pronunciationDictId?: string;
 
   constructor(options: ElevenLabsTTSOptions) {
     this.elevenlabs = new ElevenLabsClient({
       apiKey: options.apiKey,
     });
-    
-    this.useTurboModel = options.useTurboModel ?? true; // Default to turbo for battle rap
-    this.pronunciationDictId = options.pronunciationDictId;
     
     this.outputDir = path.join(process.cwd(), 'temp_audio');
     if (!fs.existsSync(this.outputDir)) {
@@ -151,48 +144,6 @@ export class ElevenLabsTTSService {
     return voiceId;
   }
 
-  /**
-   * Add natural breath patterns and dramatic pauses for battle rap delivery
-   * ElevenLabs interprets punctuation naturally, so we enhance the text with strategic pauses
-   */
-  private addBreathPatterns(text: string, voiceStyle?: string): string {
-    let processedText = text;
-    
-    // Add dramatic pauses before powerful lines (indicated by exclamation marks)
-    processedText = processedText.replace(/!/g, '... !');
-    
-    // Add breath points after long sentences (commas become natural breath points)
-    // Split by periods and add strategic pauses
-    const sentences = processedText.split(/\.\s+/);
-    processedText = sentences.map((sentence, idx) => {
-      if (sentence.length > 80) {
-        // Add a breath in the middle of long lines
-        const midPoint = sentence.length / 2;
-        const commaIndex = sentence.indexOf(',', midPoint - 20);
-        if (commaIndex > 0) {
-          sentence = sentence.slice(0, commaIndex + 1) + '..' + sentence.slice(commaIndex + 1);
-        }
-      }
-      return sentence;
-    }).join('. ');
-    
-    // Aggressive style gets more dramatic pauses
-    if (voiceStyle === 'aggressive' || voiceStyle === 'intense') {
-      // Add emphasis pauses before key words
-      processedText = processedText
-        .replace(/\b(destroy|crush|murder|kill|end|finish)\b/gi, '... $1')
-        .replace(/\b(better|best|greatest|king|queen|champion)\b/gi, '$1 ...');
-    }
-    
-    // Add natural breathing at line breaks (double spaces or newlines)
-    processedText = processedText
-      .replace(/\n\n/g, '... ')
-      .replace(/\n/g, ', ')
-      .replace(/\s{2,}/g, '.. ');
-    
-    return processedText;
-  }
-
   private applyCharacterSpeechEffects(text: string, characterId: string, voiceStyle?: string): string {
     let processedText = text;
     
@@ -203,9 +154,6 @@ export class ElevenLabsTTSService {
       .replace(/\*.*?\*/g, '') // Remove emphasis markers
       .replace(/\s+/g, ' ')    // Normalize whitespace
       .trim();
-
-    // Add breath patterns for natural rap delivery
-    processedText = this.addBreathPatterns(processedText, voiceStyle);
 
     // Special processing for CYPHER-9000 robot character
     if (characterId === 'cypher') {
@@ -235,42 +183,10 @@ export class ElevenLabsTTSService {
       const suffix = robotSuffixes[Math.floor(Math.random() * robotSuffixes.length)];
       
       processedText = `${prefix} ${processedText} ${suffix}`;
-      console.log(`🤖 CYPHER-9000 ElevenLabs: Applied robotic speech patterns with breath control`);
+      console.log(`🤖 CYPHER-9000 ElevenLabs: Applied robotic speech patterns`);
     }
 
     return processedText;
-  }
-
-  /**
-   * Calculate optimal speed for battle rap delivery
-   * Battle rap requires varied pacing - fast for aggressive, varied for dramatic effect
-   */
-  private calculateRapSpeed(characterId: string, voiceStyle?: string, speedMultiplier: number = 1.0): number {
-    // Base speeds for different battle rap styles
-    const styleSpeedMap: Record<string, number> = {
-      'aggressive': 1.15,  // Faster, more intense delivery
-      'confident': 1.05,   // Slightly faster than normal, commanding
-      'smooth': 0.95,      // Slower, more controlled flow
-      'intense': 1.2,      // Maximum speed for intensity
-      'playful': 1.1       // Upbeat, quick delivery
-    };
-    
-    // Character-specific speed adjustments
-    const characterSpeedMap: Record<string, number> = {
-      'razor': 1.1,    // Fast, sharp delivery
-      'venom': 1.0,    // Measured, menacing pace
-      'silk': 0.95,    // Smooth, slower flow
-      'cypher': 1.15   // Robotic, precise and fast
-    };
-    
-    const styleSpeed = voiceStyle ? (styleSpeedMap[voiceStyle] || 1.0) : 1.0;
-    const characterSpeed = characterSpeedMap[characterId] || 1.0;
-    
-    // Combine all speed factors
-    // ElevenLabs speed range: 0.25 to 4.0, but 0.5-1.5 is most natural
-    const finalSpeed = Math.min(1.5, Math.max(0.5, styleSpeed * characterSpeed * speedMultiplier));
-    
-    return finalSpeed;
   }
 
   async generateTTS(
@@ -291,37 +207,29 @@ export class ElevenLabsTTSService {
       
       console.log(`🚀 Using ElevenLabs voice ID: ${voiceId} with style: ${voiceStyle}`);
       
-      // Apply character-specific speech effects with breath patterns
+      // Apply character-specific speech effects
       const processedText = this.applyCharacterSpeechEffects(text, characterId, voiceStyle);
       
-      // Calculate optimal speed for battle rap delivery
-      const rapSpeed = this.calculateRapSpeed(characterId, voiceStyle, options.speedMultiplier || 1.0);
-      
-      // Voice settings for rap battle delivery with speed control
+      // Voice settings for rap battle delivery
       const voiceSettings = {
         stability: 0.5,           // Medium stability for natural variation
-        similarityBoost: 0.8,     // High similarity to maintain character voice
+        similarity_boost: 0.8,    // High similarity to maintain character voice
         style: this.getStyleBoost(voiceStyle), // Dynamic style based on character
-        useSpeakerBoost: true,    // Enhanced clarity for battle rap
-        speed: rapSpeed           // Native speed control for perfect pacing
+        use_speaker_boost: true   // Enhanced clarity for battle rap
       };
 
-      console.log(`🎯 ElevenLabs voice settings: stability=${voiceSettings.stability}, similarity=${voiceSettings.similarityBoost}, style=${voiceSettings.style}, speed=${voiceSettings.speed}x`);
+      console.log(`🎯 ElevenLabs voice settings: stability=${voiceSettings.stability}, similarity=${voiceSettings.similarity_boost}, style=${voiceSettings.style}`);
 
-      // Select optimal model for battle rap (Turbo for speed, Multilingual for quality)
-      const modelId = this.useTurboModel ? "eleven_turbo_v2_5" : "eleven_multilingual_v2";
-      console.log(`⚡ Using ${modelId} model for ${this.useTurboModel ? 'ultra-fast' : 'high-quality'} generation`);
+      // Apply speed multiplier if provided (ElevenLabs doesn't support direct speed control, so we adjust duration estimate)
+      const speedMultiplier = options.speedMultiplier || 1.0;
+      console.log(`🎯 ElevenLabs speed: ${speedMultiplier}x`);
 
       // Generate speech with ElevenLabs API
       const audioResponse = await this.elevenlabs.textToSpeech.convert(voiceId, {
         text: processedText,
-        modelId: modelId,
+        modelId: "eleven_multilingual_v2", // Latest multilingual model
         outputFormat: "mp3_44100_128", // High quality MP3
-        voiceSettings: voiceSettings,
-        pronunciationDictionaryLocators: this.pronunciationDictId ? [{
-          pronunciationDictionaryId: this.pronunciationDictId,
-          versionId: "latest"
-        }] : undefined
+        voice_settings: voiceSettings
       });
 
       // Save to file
@@ -342,15 +250,15 @@ export class ElevenLabsTTSService {
       const buffer = Buffer.concat(chunks);
       fs.writeFileSync(outputPath, buffer);
 
-      console.log(`✅ ElevenLabs TTS success: ${buffer.length} bytes with ${rapSpeed}x speed and breath patterns`);
+      console.log(`✅ ElevenLabs TTS success: ${buffer.length} bytes`);
 
       // Convert to base64 for immediate use
       const base64Audio = buffer.toString('base64');
       const audioUrl = `data:audio/mpeg;base64,${base64Audio}`;
 
-      // Estimate duration (adjusted for actual speed)
+      // Estimate duration (rough calculation for MP3, adjusted for speed multiplier)
       const baseDuration = Math.floor(processedText.length / 15);
-      const duration = Math.floor(baseDuration / rapSpeed);
+      const duration = Math.floor(baseDuration / speedMultiplier);
 
       return {
         audioUrl,
@@ -396,55 +304,6 @@ export class ElevenLabsTTSService {
       console.error('❌ Failed to get user voices:', error);
       return [];
     }
-  }
-
-  /**
-   * Create or update pronunciation dictionary for battle rap terms
-   * This ensures rap slang, artist names, and technical terms are pronounced correctly
-   */
-  async createRapPronunciationDictionary(): Promise<string | null> {
-    try {
-      // Battle rap specific pronunciation rules
-      const rapPronunciationRules = [
-        // Common rap slang and terms
-        { type: "alias" as const, stringToReplace: "mic", alias: "mike" },
-        { type: "alias" as const, stringToReplace: "cypher", alias: "sigh-fer" },
-        { type: "alias" as const, stringToReplace: "flow", alias: "floh" },
-        { type: "alias" as const, stringToReplace: "bars", alias: "bahrz" },
-        { type: "alias" as const, stringToReplace: "diss", alias: "dis" },
-        { type: "alias" as const, stringToReplace: "freestyle", alias: "free-style" },
-        { type: "alias" as const, stringToReplace: "beatbox", alias: "beet-box" },
-        { type: "alias" as const, stringToReplace: "MC", alias: "em-see" },
-        { type: "alias" as const, stringToReplace: "DJ", alias: "dee-jay" },
-        { type: "alias" as const, stringToReplace: "rhyme", alias: "rime" },
-        { type: "alias" as const, stringToReplace: "verse", alias: "vurs" },
-        // Battle rap specific
-        { type: "alias" as const, stringToReplace: "rap battle", alias: "wrap battle" },
-        { type: "alias" as const, stringToReplace: "spit", alias: "spit" },
-        { type: "alias" as const, stringToReplace: "roast", alias: "rohst" },
-        { type: "alias" as const, stringToReplace: "yo", alias: "yoh" },
-      ];
-
-      const response = await this.elevenlabs.pronunciationDictionaries.createFromRules({
-        name: "Battle Rap Dictionary",
-        description: "Custom pronunciations for battle rap terms and slang",
-        rules: rapPronunciationRules
-      });
-
-      console.log(`✅ Created pronunciation dictionary: ${response.id}`);
-      return response.id;
-    } catch (error: any) {
-      console.error('❌ Failed to create pronunciation dictionary:', error.message);
-      return null;
-    }
-  }
-
-  /**
-   * Set a custom pronunciation dictionary for this instance
-   */
-  setPronunciationDictionary(dictId: string) {
-    this.pronunciationDictId = dictId;
-    console.log(`📖 Pronunciation dictionary set: ${dictId}`);
   }
 }
 

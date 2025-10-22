@@ -1,49 +1,20 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BATTLE_CHARACTERS, type BattleCharacter, cloneToBattleCharacter } from "@shared/characters";
-import { useQuery } from "@tanstack/react-query";
-import { Bot, Sparkles } from "lucide-react";
+import { BATTLE_CHARACTERS, type BattleCharacter } from "@shared/characters";
 
 interface CharacterSelectorProps {
   onCharacterSelect: (character: BattleCharacter) => void;
   selectedCharacter?: BattleCharacter;
 }
 
-interface UserClone {
-  id: string;
-  cloneName: string;
-  skillLevel: number;
-  style: string;
-  voiceId: string | null;
-}
-
 export function CharacterSelector({ onCharacterSelect, selectedCharacter }: CharacterSelectorProps) {
-  const [allCharacters, setAllCharacters] = useState<BattleCharacter[]>([...BATTLE_CHARACTERS]);
-
-  // Fetch user's clone
-  const { data: userClone } = useQuery<UserClone>({
-    queryKey: ['/api/user/clone'],
-    retry: false,
-  });
-
-  // Update character list when clone is loaded
-  useEffect(() => {
-    if (userClone) {
-      const cloneCharacter = cloneToBattleCharacter(userClone);
-      // Add clone to the beginning of the list
-      setAllCharacters([cloneCharacter, ...BATTLE_CHARACTERS]);
-    } else {
-      setAllCharacters([...BATTLE_CHARACTERS]);
-    }
-  }, [userClone]);
-
   return (
     <div className="space-y-4">
       <h3 className="text-lg font-semibold text-white mb-4">Choose Your Opponent</h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {allCharacters.map((character) => (
+        {BATTLE_CHARACTERS.map((character) => (
           <Card
             key={character.id}
             className={`cursor-pointer transition-all hover:scale-105 ${
@@ -56,16 +27,8 @@ export function CharacterSelector({ onCharacterSelect, selectedCharacter }: Char
           >
             <CardContent className="p-4 text-center">
               {/* Character Avatar */}
-              <div className="mb-3 relative">
-                {character.isClone && (
-                  <div className="absolute -top-2 -right-2 z-10">
-                    <Badge className="bg-purple-600 text-white text-xs">
-                      <Bot className="h-3 w-3 mr-1" />
-                      Clone
-                    </Badge>
-                  </div>
-                )}
-                <div className={`w-20 h-20 mx-auto rounded-full overflow-hidden border-2 ${character.isClone ? 'border-purple-500' : 'border-accent-gold'} bg-gradient-to-br ${character.isClone ? 'from-purple-500 to-blue-500' : 'from-accent-gold to-accent-red'} flex items-center justify-center`}>
+              <div className="mb-3">
+                <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border-2 border-accent-gold bg-gradient-to-br from-accent-gold to-accent-red flex items-center justify-center">
                   {character.avatar ? (
                     <img
                       src={`/attached_assets/generated_images/${character.avatar}`}

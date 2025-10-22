@@ -1,17 +1,14 @@
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Volume2, VolumeX, Bot } from "lucide-react";
+import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Volume2, VolumeX } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import themeSong from "@assets/Lyrical sauce, you can't handle the boss_1756951536849.mp3";
 import { SocialShare } from "@/components/SocialShare";
-import { RewardedVideoAd } from "@/components/rewarded-video-ad";
-import { AdBanner } from "@/components/ad-banner";
-import { useToast } from "@/hooks/use-toast";
 
 interface SubscriptionStatus {
   tier: 'free' | 'premium' | 'pro';
@@ -40,8 +37,6 @@ export default function Home() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.6);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   
   const { data: subscriptionStatus } = useQuery<SubscriptionStatus>({
     queryKey: ["/api/subscription/status"],
@@ -101,35 +96,6 @@ export default function Home() {
     setVolume(newVolume);
     if (audioRef.current) {
       audioRef.current.volume = newVolume;
-    }
-  };
-
-  // Handle ad reward - add free battles
-  const handleAdReward = async () => {
-    try {
-      const response = await fetch('/api/rewards/watch-ad', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ 
-          rewardType: 'battle',
-          rewardAmount: 1 
-        }),
-      });
-
-      if (response.ok) {
-        // Refresh subscription status to show new battle count
-        queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-      } else {
-        throw new Error('Failed to process reward');
-      }
-    } catch (error) {
-      console.error('Error processing ad reward:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add battle. Please try again.",
-        variant: "destructive",
-      });
     }
   };
 
@@ -274,7 +240,7 @@ export default function Home() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
           <Card className="bg-gradient-to-r from-purple-800 to-purple-600 border-purple-500 text-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -301,11 +267,6 @@ export default function Home() {
                     No Battles Left
                   </Button>
                   <div className="mt-3 space-y-2">
-                    {subscriptionStatus?.tier === 'free' && (
-                      <p className="text-xs text-purple-200 text-center">
-                        💡 Watch an ad to earn a free battle!
-                      </p>
-                    )}
                     <Link href="/subscribe?tier=premium">
                       <Button variant="outline" className="w-full border-purple-400 text-purple-400 hover:bg-purple-400 hover:text-white text-sm">
                         Upgrade to Premium - $9.99/mo
@@ -336,25 +297,6 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <Card className="bg-gradient-to-r from-blue-800 to-purple-600 border-blue-500 text-white">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bot className="h-5 w-5" />
-                Clone Manager
-              </CardTitle>
-              <CardDescription className="text-blue-100">
-                Create and battle against an AI clone of yourself
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href="/clone">
-                <Button className="w-full bg-white text-blue-600 hover:bg-gray-100 font-semibold" data-testid="button-clone">
-                  Manage Clone
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-
           <Card className="bg-gradient-to-r from-slate-800 to-slate-600 border-slate-500 text-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -374,28 +316,6 @@ export default function Home() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Monetization Section for Free Users */}
-        {subscriptionStatus?.tier === 'free' && (
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            {/* Rewarded Video Ad */}
-            {!subscriptionStatus?.canStartBattle && (
-              <RewardedVideoAd
-                onRewardEarned={handleAdReward}
-                rewardType="battle"
-                rewardAmount={1}
-              />
-            )}
-            
-            {/* Banner Ad Space */}
-            <AdBanner 
-              slot="home-banner-1"
-              format="auto"
-              responsive={true}
-              className="min-h-[250px]"
-            />
-          </div>
-        )}
 
         {/* Recent Battles */}
         <Card className="bg-slate-800 border-slate-700 text-white">

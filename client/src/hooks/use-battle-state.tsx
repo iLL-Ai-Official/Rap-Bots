@@ -135,7 +135,7 @@ export function useBattleState(battleId?: string) {
   });
 
   const startNewBattle = (
-    difficulty: "easy" | "normal" | "hard" | "nightmare" | "god", 
+    difficulty: "easy" | "normal" | "hard", 
     profanityFilter: boolean = true,
     aiCharacterId?: string,
     lyricComplexity?: number,

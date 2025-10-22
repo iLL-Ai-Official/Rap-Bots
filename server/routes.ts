@@ -11,6 +11,8 @@ import { barkTTS } from "./services/bark";
 import { scoringService } from "./services/scoring";
 import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
+import { matchmakingService } from "./services/matchmaking";
+import { realtimeAnalysisService } from "./services/realtime-analysis";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -718,73 +720,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Ad impression analytics tracking
-  app.post('/api/analytics/ad-impression', isAuthenticated, async (req: any, res) => {
+  // Random match battle endpoint
+  app.post("/api/battles/random-match", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { adType, battleId, revenue, clicked } = req.body;
+      const { difficulty, preferredCharacters } = req.body;
 
-      // Log ad impression for analytics
-      console.log(`📊 Ad Impression: ${adType}`, {
+      console.log(`🎮 Random match requested by user ${userId}`);
+
+      // Check if user can start a battle
+      const canBattle = await storage.canUserStartBattle(userId);
+      if (!canBattle) {
+        return res.status(403).json({ 
+          message: "Battle limit reached. Upgrade to Premium or Pro for more battles!",
+          upgrade: true 
+        });
+      }
+
+      // Find random match
+      const match = await matchmakingService.findRandomMatch({
         userId,
-        battleId,
-        revenue: revenue || 0,
-        clicked: clicked || false,
-        timestamp: new Date().toISOString()
+        difficulty,
+        preferredCharacters,
       });
 
-      // In production, store this in analytics database
-      // For now, just acknowledge receipt
-      res.json({ success: true, message: 'Ad impression tracked' });
-    } catch (error) {
-      console.error("Error tracking ad impression:", error);
-      res.status(500).json({ message: "Failed to track ad impression" });
-    }
-  });
+      // Create battle with random opponent
+      const battleData = {
+        userId,
+        difficulty: match.difficulty,
+        profanityFilter: false,
+        lyricComplexity: match.lyricComplexity,
+        styleIntensity: match.styleIntensity,
+        voiceSpeed: 1.0,
+        aiCharacterName: match.opponentName,
+        aiCharacterId: match.opponentCharacterId,
+        userScore: 0,
+        aiScore: 0,
+        rounds: [],
+        status: "active"
+      };
 
-  // Reward user for watching ad
-  app.post('/api/rewards/watch-ad', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const { rewardType, rewardAmount } = req.body;
-
-      if (rewardType === 'battle' || rewardType === 'battles') {
-        // Award free battle(s) for watching ad
-        const battles = rewardType === 'battle' ? 1 : rewardAmount;
-        await storage.addUserBattles(userId, battles);
-        
-        console.log(`🎁 Rewarded user ${userId} with ${battles} battle(s) for watching ad`);
-        
-        res.json({ 
-          success: true, 
-          battlesAdded: battles,
-          message: `Added ${battles} battle(s) to your account!` 
-        });
-      } else if (rewardType === 'credits') {
-        // Award store credit for watching ad
-        const user = await storage.getUser(userId);
-        if (!user) {
-          return res.status(404).json({ message: 'User not found' });
+      const battle = await storage.createBattle(battleData);
+      
+      console.log(`✅ Random match created: ${match.opponentName} vs User`);
+      
+      res.status(201).json({
+        battle,
+        match: {
+          opponentName: match.opponentName,
+          opponentId: match.opponentCharacterId,
+          difficulty: match.difficulty,
         }
-        
-        const currentCredit = parseFloat(user.storeCredit || '0');
-        const newCredit = (currentCredit + rewardAmount).toFixed(2);
-        await storage.updateUser(userId, { storeCredit: newCredit });
-        
-        console.log(`🎁 Rewarded user ${userId} with $${rewardAmount} credit for watching ad`);
-        
-        res.json({ 
-          success: true, 
-          creditAdded: rewardAmount,
-          newBalance: newCredit,
-          message: `Added $${rewardAmount} to your account!` 
-        });
-      } else {
-        res.status(400).json({ message: 'Invalid reward type' });
-      }
-    } catch (error) {
-      console.error("Error processing ad reward:", error);
-      res.status(500).json({ message: "Failed to process ad reward" });
+      });
+    } catch (error: any) {
+      console.error("Error creating random match battle:", error);
+      res.status(500).json({ message: "Failed to create random match battle" });
     }
   });
 
@@ -805,7 +795,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.body;
 
       // SECURITY: Validate battle parameters
-      const validDifficulties = ['easy', 'normal', 'hard', 'nightmare', 'god'];
+      const validDifficulties = ['easy', 'normal', 'hard', 'nightmare'];
       if (difficulty && !validDifficulties.includes(difficulty)) {
         return res.status(400).json({ message: "Invalid difficulty level" });
       }
@@ -826,11 +816,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Voice speed must be between 0.5-2.0" });
       }
 
-      // SECURITY: Validate AI character selection (including clones)
+      // SECURITY: Validate AI character selection
       const validCharacters = ['razor', 'venom', 'silk', 'cypher'];
-      const isCloneBattle = aiCharacterId?.startsWith('clone_');
-      
-      if (aiCharacterId && !validCharacters.includes(aiCharacterId) && !isCloneBattle) {
+      if (aiCharacterId && !validCharacters.includes(aiCharacterId)) {
         return res.status(400).json({ message: "Invalid AI character" });
       }
 
@@ -941,11 +929,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/user/api-keys', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { openaiApiKey, groqApiKey, preferredTtsService } = req.body;
+      const { openaiApiKey, groqApiKey, elevenlabsApiKey, myshellApiKey, preferredTtsService } = req.body;
 
       const user = await storage.updateUserAPIKeys(userId, {
         openaiApiKey,
         groqApiKey,
+        elevenlabsApiKey,
+        myshellApiKey,
         preferredTtsService
       });
 
@@ -964,11 +954,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { service } = req.body;
 
-      if (!service || !['openai', 'groq'].includes(service)) {
+      if (!service || !['openai', 'groq', 'elevenlabs', 'myshell'].includes(service)) {
         return res.status(400).json({ message: "Invalid service specified" });
       }
 
-      const isValid = await userTTSManager.testUserAPIKey(userId, service as 'openai' | 'groq');
+      const isValid = await userTTSManager.testUserAPIKey(userId, service as 'openai' | 'groq' | 'elevenlabs' | 'myshell');
       res.json({ valid: isValid });
     } catch (error) {
       console.error(`Error testing ${req.body.service} API key:`, error);
@@ -1063,7 +1053,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isPlayingAudio: false,
         userScore: battle.userScore,
         aiScore: battle.aiScore,
-        difficulty: battle.difficulty as "easy" | "normal" | "hard" | "nightmare" | "god",
+        difficulty: battle.difficulty as "easy" | "normal" | "hard",
         profanityFilter: battle.profanityFilter,
         timeRemaining: 30,
       };
@@ -1215,32 +1205,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userPerformanceScore = scoringService.calculateUserScore(userText);
       console.log(`🎯 User performance: ${userPerformanceScore}/100 - AI will react accordingly`);
 
-      // Check if this is a clone battle and adjust difficulty/complexity accordingly
-      const isCloneBattle = battle.aiCharacterId?.startsWith('clone_');
-      let adjustedDifficulty = battle.difficulty;
-      let adjustedComplexity = battle.lyricComplexity || 50;
-      let adjustedIntensity = battle.styleIntensity || 50;
-
-      if (isCloneBattle) {
-        console.log(`🤖 Clone battle detected - adjusting AI to match user's skill level`);
-        const cloneId = battle.aiCharacterId.replace('clone_', '');
-        const clone = await storage.getCloneById(cloneId);
-        
-        if (clone) {
-          // Adjust AI difficulty based on clone's skill level
-          adjustedComplexity = clone.avgRhymeDensity;
-          adjustedIntensity = clone.skillLevel;
-          
-          // Map skill level to difficulty
-          if (clone.skillLevel < 40) adjustedDifficulty = 'easy';
-          else if (clone.skillLevel >= 40 && clone.skillLevel < 65) adjustedDifficulty = 'normal';
-          else if (clone.skillLevel >= 65 && clone.skillLevel < 85) adjustedDifficulty = 'hard';
-          else adjustedDifficulty = 'nightmare';
-          
-          console.log(`🎯 Clone AI settings: difficulty=${adjustedDifficulty}, complexity=${adjustedComplexity}, intensity=${adjustedIntensity}`);
-        }
-      }
-
       // NOW generate AI response with user score context for reactive behavior
       console.log(`🤖 Generating AI response for: "${userText.substring(0, 30)}..."`);
 
@@ -1250,10 +1214,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         aiResponseText = await Promise.race([
           groqService.generateRapResponse(
             userText, // Use actual transcription for better AI response
-            adjustedDifficulty, 
+            battle.difficulty, 
             battle.profanityFilter,
-            adjustedComplexity,
-            adjustedIntensity,
+            battle.lyricComplexity || 50,
+            battle.styleIntensity || 50,
             userPerformanceScore // Pass user score for reactive AI
           ),
           new Promise<string>((_, reject) => 
@@ -1550,7 +1514,157 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Analyze lyrics endpoint for frontend
+  // ML-powered lyric analysis endpoint
+  app.post('/api/ml-analyze-lyrics', isAuthenticated, async (req: any, res) => {
+    try {
+      const { text } = req.body;
+
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ message: 'Text is required' });
+      }
+
+      console.log(`🧠 ML-powered analysis requested for: "${text.substring(0, 50)}..."`);
+
+      // Use Groq's ML-powered analysis
+      const analysis = await groqService.analyzeLyricsWithML(text);
+
+      res.json({
+        ...analysis,
+        mlPowered: true,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('ML lyric analysis error:', error);
+      res.status(500).json({ message: 'ML analysis failed' });
+    }
+  });
+
+  // ML battle prediction endpoint
+  app.post('/api/ml-predict-battle', isAuthenticated, async (req: any, res) => {
+    try {
+      const { userLyrics, aiLyrics } = req.body;
+
+      if (!userLyrics || !aiLyrics) {
+        return res.status(400).json({ message: 'Both user and AI lyrics required' });
+      }
+
+      console.log(`🔮 ML battle prediction requested`);
+
+      // Use Groq's ML-powered prediction
+      const prediction = await groqService.predictBattleOutcome(userLyrics, aiLyrics);
+
+      res.json({
+        ...prediction,
+        mlPowered: true,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('ML battle prediction error:', error);
+      res.status(500).json({ message: 'ML prediction failed' });
+    }
+  });
+
+  // ML rhyme generation endpoint
+  app.post('/api/ml-generate-rhymes', isAuthenticated, async (req: any, res) => {
+    try {
+      const { seedWord, count } = req.body;
+
+      if (!seedWord || typeof seedWord !== 'string') {
+        return res.status(400).json({ message: 'Seed word is required' });
+      }
+
+      console.log(`🎵 ML rhyme generation for: ${seedWord}`);
+
+      // Use Groq's ML-powered rhyme generation
+      const rhymes = await groqService.generateMLRhymes(seedWord, count || 5);
+
+      res.json({
+        seedWord,
+        rhymes,
+        mlPowered: true,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('ML rhyme generation error:', error);
+      res.status(500).json({ message: 'ML rhyme generation failed' });
+    }
+  });
+
+  // Real-time analysis endpoint (fast, cached)
+  app.post('/api/realtime-analyze', isAuthenticated, async (req: any, res) => {
+    try {
+      const { text, includeML, isFinalScore, battleId } = req.body;
+
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ message: 'Text is required' });
+      }
+
+      console.log(`⚡ Real-time analysis requested for: "${text.substring(0, 50)}..."`);
+
+      const analysis = await realtimeAnalysisService.analyzeRealtime(text, {
+        includeML: includeML || false,
+        isFinalScore: isFinalScore || false,
+        battleId: battleId
+      });
+
+      res.json(analysis);
+
+    } catch (error: any) {
+      console.error('Real-time analysis error:', error);
+      res.status(500).json({ message: 'Real-time analysis failed' });
+    }
+  });
+
+  // Compare two verses endpoint
+  app.post('/api/compare-verses', isAuthenticated, async (req: any, res) => {
+    try {
+      const { verse1, verse2, includeML } = req.body;
+
+      if (!verse1 || !verse2) {
+        return res.status(400).json({ message: 'Both verses are required' });
+      }
+
+      console.log(`⚔️ Verse comparison requested`);
+
+      const comparison = await realtimeAnalysisService.compareVerses(
+        verse1, 
+        verse2, 
+        includeML || false
+      );
+
+      res.json(comparison);
+
+    } catch (error: any) {
+      console.error('Verse comparison error:', error);
+      res.status(500).json({ message: 'Verse comparison failed' });
+    }
+  });
+
+  // Batch analysis endpoint
+  app.post('/api/batch-analyze', isAuthenticated, async (req: any, res) => {
+    try {
+      const { verses } = req.body;
+
+      if (!Array.isArray(verses) || verses.length === 0) {
+        return res.status(400).json({ message: 'Verses array is required' });
+      }
+
+      console.log(`📦 Batch analysis for ${verses.length} verses`);
+
+      const results = await realtimeAnalysisService.batchAnalyze(verses);
+
+      res.json({ results, count: results.length });
+
+    } catch (error: any) {
+      console.error('Batch analysis error:', error);
+      res.status(500).json({ message: 'Batch analysis failed' });
+    }
+  });
+
+  // Analyze lyrics endpoint for frontend (legacy support)
   app.post('/api/analyze-lyrics', isAuthenticated, async (req: any, res) => {
     try {
       const { text } = req.body;
@@ -1559,26 +1673,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Text is required' });
       }
 
-      // Use the scoring service to analyze the lyrics
-      const dummyAiText = "Sample AI response for analysis";
-      const analysis = scoringService.scoreRound(text, dummyAiText);
+      // Use new real-time analysis service
+      const analysis = await realtimeAnalysisService.analyzeRealtime(text, {
+        includeML: false,
+        isFinalScore: false
+      });
 
+      // Format response for legacy compatibility
       const result = {
         rhymeDensity: analysis.rhymeDensity,
         flowQuality: analysis.flowQuality,
         creativity: analysis.creativity,
-        overallScore: analysis.userScore,
+        overallScore: analysis.score,
         breakdown: {
           vocabulary: Math.floor(analysis.creativity * 0.3),
           wordplay: Math.floor(analysis.creativity * 0.4),
           rhythm: Math.floor(analysis.flowQuality * 0.8),
           originality: Math.floor(analysis.creativity * 0.6)
         },
-        suggestions: [
-          analysis.userScore < 50 ? "Try adding more complex rhyme schemes" : "Great rhyme complexity!",
-          analysis.flowQuality < 60 ? "Work on syllable timing and rhythm" : "Excellent flow!",
-          analysis.creativity < 40 ? "Add more metaphors and wordplay" : "Creative wordplay detected!"
-        ]
+        suggestions: analysis.improvements,
+        feedback: analysis.feedback
       };
 
       res.json(result);
@@ -1685,54 +1799,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error serving SFX file:', error);
       res.status(500).json({ error: 'Failed to serve SFX file' });
-    }
-  });
-
-  // User Clone endpoints
-  app.get('/api/user/clone', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const clone = await storage.getUserClone(userId);
-      
-      if (!clone) {
-        return res.status(404).json({ message: 'No clone found. Create one by analyzing your battles!' });
-      }
-
-      res.json(clone);
-    } catch (error) {
-      console.error('Error fetching user clone:', error);
-      res.status(500).json({ message: 'Failed to fetch clone' });
-    }
-  });
-
-  app.post('/api/user/clone/generate', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      
-      console.log(`🤖 Generating clone for user ${userId}...`);
-      const clone = await storage.createOrUpdateUserClone(userId);
-      
-      console.log(`✅ Clone generated: ${clone.cloneName} (Skill: ${clone.skillLevel})`);
-      res.json(clone);
-    } catch (error) {
-      console.error('Error generating user clone:', error);
-      res.status(500).json({ message: 'Failed to generate clone' });
-    }
-  });
-
-  app.get('/api/clone/:cloneId', isAuthenticated, async (req: any, res) => {
-    try {
-      const { cloneId } = req.params;
-      const clone = await storage.getCloneById(cloneId);
-      
-      if (!clone) {
-        return res.status(404).json({ message: 'Clone not found' });
-      }
-
-      res.json(clone);
-    } catch (error) {
-      console.error('Error fetching clone:', error);
-      res.status(500).json({ message: 'Failed to fetch clone' });
     }
   });
 

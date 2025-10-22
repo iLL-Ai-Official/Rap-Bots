@@ -14,7 +14,7 @@ export interface FineTuningJob {
 export interface RapTrainingData {
   prompt: string;
   completion: string;
-  difficulty: "easy" | "normal" | "hard" | "nightmare" | "god";
+  difficulty: "easy" | "normal" | "hard";
   style: string;
   rhyme_scheme?: string;
 }

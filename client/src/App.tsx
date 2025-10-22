@@ -19,7 +19,6 @@ import TournamentHistory from "@/pages/tournament-history";
 import TournamentBrackets from "@/pages/tournament-brackets";
 import FineTuning from "@/pages/fine-tuning";
 import Settings from "@/pages/settings";
-import CloneManager from "@/pages/clone-manager";
 import NotFound from "@/pages/not-found";
 import AdminPage from "@/pages/admin";
 
@@ -57,7 +56,6 @@ function Router() {
           <Route path="/tournament/:tournamentId/battle/:battleId" component={BattleArena} />
           <Route path="/fine-tuning" component={FineTuning} />
           <Route path="/settings" component={Settings} />
-          <Route path="/clone" component={CloneManager} />
           <Route path="/admin" component={AdminPage} />
           <Route component={NotFound} />
         </>

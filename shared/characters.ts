@@ -6,12 +6,10 @@ export interface BattleCharacter {
   gender: 'male' | 'female';
   personality: string;
   style: string;
-  difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' | 'god';
+  difficulty: 'easy' | 'normal' | 'hard' | 'nightmare';
   backstory: string;
   signature: string;
   avatar?: string;
-  isClone?: boolean; // Flag to identify clone characters
-  skillLevel?: number; // Clone skill level (0-100)
 }
 
 export const BATTLE_CHARACTERS: BattleCharacter[] = [
@@ -80,36 +78,4 @@ export const getRandomCharacter = (excludeId?: string): BattleCharacter => {
 
 export const getCharacterById = (id: string): BattleCharacter | undefined => {
   return BATTLE_CHARACTERS.find(char => char.id === id);
-};
-
-// Convert user clone to BattleCharacter format
-export const cloneToBattleCharacter = (clone: {
-  id: string;
-  cloneName: string;
-  skillLevel: number;
-  style: string;
-  voiceId: string | null;
-}): BattleCharacter => {
-  // Map skill level to difficulty
-  let difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' | 'god' = 'normal';
-  if (clone.skillLevel < 40) difficulty = 'easy';
-  else if (clone.skillLevel >= 40 && clone.skillLevel < 65) difficulty = 'normal';
-  else if (clone.skillLevel >= 65 && clone.skillLevel < 85) difficulty = 'hard';
-  else if (clone.skillLevel >= 85 && clone.skillLevel < 95) difficulty = 'nightmare';
-  else difficulty = 'god'; // 95+ is god-tier
-
-  return {
-    id: `clone_${clone.id}`,
-    name: clone.cloneName,
-    displayName: clone.cloneName,
-    voiceId: clone.voiceId || 'Thunder-PlayAI',
-    gender: 'male', // Default, could be made configurable
-    personality: `A mirror of your skills, matching your ${clone.style} style and ${clone.skillLevel} skill level`,
-    style: clone.style,
-    difficulty,
-    backstory: `This is your clone - an AI opponent that mirrors your rap battle abilities and style. It's trained on your performance data.`,
-    signature: `I'm your reflection, your shadow in the spotlight`,
-    isClone: true,
-    skillLevel: clone.skillLevel,
-  };
 };

@@ -82,7 +82,7 @@ export interface BattleState {
   isPlayingAudio: boolean;
   userScore: number;
   aiScore: number;
-  difficulty: "easy" | "normal" | "hard" | "nightmare" | "god";
+  difficulty: "easy" | "normal" | "hard";
   profanityFilter: boolean;
   timeRemaining: number;
 }
@@ -148,7 +148,8 @@ export const users = pgTable("users", {
   openaiApiKey: varchar("openai_api_key"), // User's encrypted OpenAI API key
   groqApiKey: varchar("groq_api_key"), // User's encrypted Groq API key
   elevenlabsApiKey: varchar("elevenlabs_api_key"), // User's encrypted ElevenLabs API key
-  preferredTtsService: varchar("preferred_tts_service").default("elevenlabs"), // "openai", "groq", "elevenlabs", "system"
+  myshellApiKey: varchar("myshell_api_key"), // User's encrypted MyShell AI API key
+  preferredTtsService: varchar("preferred_tts_service").default("myshell"), // "openai", "groq", "elevenlabs", "myshell", "system"
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -298,19 +299,19 @@ export const SUBSCRIPTION_TIERS = {
     name: "Free",
     price: 0,
     battlesPerDay: 3,
-    features: ["3 battles per day", "Basic AI opponents", "Standard voices", "Ads supported", "Watch ads for free battles"]
+    features: ["3 battles per day", "Basic AI opponents", "Standard voices"]
   },
   premium: {
     name: "Premium",
     price: 9.99,
     battlesPerDay: 25,
-    features: ["25 battles per day", "Advanced AI opponents", "Premium voices", "Battle analysis", "No ads", "Clone battles unlimited"]
+    features: ["25 battles per day", "Advanced AI opponents", "Premium voices", "Battle analysis", "No ads"]
   },
   pro: {
     name: "Pro",
     price: 19.99,
     battlesPerDay: -1, // unlimited
-    features: ["Unlimited battles", "All AI opponents", "Custom voices", "Advanced analytics", "Priority support", "Tournament mode", "No ads", "Clone battles unlimited", "Sponsor clone battles"]
+    features: ["Unlimited battles", "All AI opponents", "Custom voices", "Advanced analytics", "Priority support", "Tournament mode"]
   }
 } as const;
 
@@ -332,34 +333,3 @@ export const insertWebhookEventSchema = createInsertSchema(processedWebhookEvent
 
 export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;
 export type ProcessedWebhookEvent = typeof processedWebhookEvents.$inferSelect;
-
-// User Clones table - Bot clones of users that match their skill level
-export const userClones = pgTable("user_clones", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id).notNull(),
-  cloneName: varchar("clone_name").notNull(), // e.g., "Shadow User" or custom name
-  skillLevel: integer("skill_level").notNull().default(50), // 0-100, based on user's average performance
-  avgRhymeDensity: integer("avg_rhyme_density").notNull().default(50), // Average rhyme density score
-  avgFlowQuality: integer("avg_flow_quality").notNull().default(50), // Average flow quality score
-  avgCreativity: integer("avg_creativity").notNull().default(50), // Average creativity score
-  battlesAnalyzed: integer("battles_analyzed").notNull().default(0), // Number of user battles used for analysis
-  style: text("style").notNull().default("balanced"), // User's battle style
-  voiceId: text("voice_id"), // Voice ID for TTS (can use similar voice to user's preferred)
-  isActive: boolean("is_active").notNull().default(true), // Whether clone is active/available
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-  updatedAt: timestamp("updated_at").notNull().defaultNow(),
-});
-
-export const insertUserCloneSchema = createInsertSchema(userClones).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-});
-
-export type InsertUserClone = z.infer<typeof insertUserCloneSchema>;
-export type UserClone = typeof userClones.$inferSelect;
-
-// Relations for user clones
-export const userCloneRelations = relations(userClones, ({ one }) => ({
-  user: one(users, { fields: [userClones.userId], references: [users.id] }),
-}));

@@ -105,218 +105,127 @@ export function SimpleAnalyzer({ text, onClose, isVisible }: SimpleAnalyzerProps
               </div>
             ) : analysis ? (
               <div className="space-y-6">
-                {/* Overall Score - Enhanced */}
-                <motion.div
-                  initial={{ scale: 0.95 }}
-                  animate={{ scale: 1 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <Card className="bg-gradient-to-br from-secondary-dark to-gray-900 border-2 border-accent-gold shadow-xl">
+                {/* Overall Score */}
+                <Card className="bg-secondary-dark border-gray-700">
+                  <CardHeader>
+                    <CardTitle className="text-accent-gold flex items-center gap-2">
+                      <Star className="w-5 h-5" />
+                      Overall Score
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-cyber-red mb-2">
+                      {analysis.overallScore}/100
+                    </div>
+                    <Progress value={analysis.overallScore} className="h-3" />
+                  </CardContent>
+                </Card>
+
+                <div className="grid md:grid-cols-3 gap-4">
+                  {/* Rhyme Density */}
+                  <Card className="bg-secondary-dark border-gray-700">
                     <CardHeader>
-                      <CardTitle className="text-accent-gold flex items-center gap-2 text-xl">
-                        <Star className="w-6 h-6 animate-pulse" />
-                        Overall Performance
+                      <CardTitle className="text-accent-red flex items-center gap-2">
+                        <Flame className="w-4 h-4" />
+                        Rhyme Density
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <div className="text-5xl font-orbitron font-bold text-transparent bg-gradient-to-r from-accent-gold via-accent-red to-accent-gold bg-clip-text">
-                            {analysis.overallScore}
-                          </div>
-                          <div className="text-gray-400 text-sm">out of 100</div>
-                        </div>
-                        <Badge 
-                          variant={analysis.overallScore >= 80 ? "default" : analysis.overallScore >= 60 ? "secondary" : "outline"}
-                          className={`px-4 py-2 text-lg ${
-                            analysis.overallScore >= 80 ? "bg-accent-gold text-black" : 
-                            analysis.overallScore >= 60 ? "bg-accent-blue" : 
-                            "bg-gray-600"
-                          }`}
-                        >
-                          {analysis.overallScore >= 80 ? "🔥 Elite" : 
-                           analysis.overallScore >= 60 ? "💪 Strong" : 
-                           analysis.overallScore >= 40 ? "👍 Decent" : 
-                           "📈 Growing"}
-                        </Badge>
+                      <div className="text-xl font-semibold mb-2">
+                        {analysis.rhymeDensity.score}/100
                       </div>
-                      <Progress 
-                        value={analysis.overallScore} 
-                        className="h-4 bg-gray-700"
-                      />
-                      <div className="text-xs text-gray-400 mt-2">
-                        {analysis.overallScore >= 80 ? "Legendary performance! Top-tier skills displayed." : 
-                         analysis.overallScore >= 60 ? "Solid delivery with room to grow." : 
-                         analysis.overallScore >= 40 ? "Good start, keep practicing your craft." : 
-                         "Focus on building your rhyme and flow fundamentals."}
+                      <Progress value={analysis.rhymeDensity.score} className="mb-3" />
+                      
+                      {analysis.rhymeDensity.endRhymes.length > 0 && (
+                        <div className="mb-2">
+                          <h4 className="font-semibold mb-1 text-sm">End Rhymes:</h4>
+                          <div className="flex flex-wrap gap-1">
+                            {analysis.rhymeDensity.endRhymes.slice(0, 4).map((rhyme, index) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                {rhyme}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {analysis.rhymeDensity.internalRhymes.length > 0 && (
+                        <div>
+                          <h4 className="font-semibold mb-1 text-sm">Internal Rhymes:</h4>
+                          <div className="flex flex-wrap gap-1">
+                            {analysis.rhymeDensity.internalRhymes.slice(0, 3).map((rhyme, index) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {rhyme}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Flow Analysis */}
+                  <Card className="bg-secondary-dark border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-accent-blue flex items-center gap-2">
+                        <Zap className="w-4 h-4" />
+                        Flow Quality
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-xl font-semibold mb-2">
+                        {analysis.flowAnalysis.score}/100
+                      </div>
+                      <Progress value={analysis.flowAnalysis.score} className="mb-3" />
+                      
+                      <div className="text-sm text-gray-400">
+                        <div>Rhythm: {analysis.flowAnalysis.rhythmConsistency}%</div>
+                        <div>Syllables: {analysis.flowAnalysis.syllablePattern.join('-')}</div>
                       </div>
                     </CardContent>
                   </Card>
-                </motion.div>
 
-                <div className="grid md:grid-cols-3 gap-4">
-                  {/* Rhyme Density - Enhanced */}
-                  <motion.div
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.1 }}
-                  >
-                    <Card className="bg-secondary-dark border-2 border-accent-red hover:border-accent-red/70 transition-all hover:shadow-lg hover:shadow-accent-red/20">
-                      <CardHeader>
-                        <CardTitle className="text-accent-red flex items-center gap-2">
-                          <Flame className="w-5 h-5" />
-                          Rhyme Density
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-orbitron font-bold mb-2 text-white">
-                          {analysis.rhymeDensity.score}
-                          <span className="text-sm text-gray-400">/100</span>
-                        </div>
-                        <Progress 
-                          value={analysis.rhymeDensity.score} 
-                          className="mb-3 h-2"
-                        />
-                        
-                        {analysis.rhymeDensity.endRhymes.length > 0 && (
-                          <div className="mb-2">
-                            <h4 className="font-semibold mb-1 text-sm text-gray-300">End Rhymes:</h4>
-                            <div className="flex flex-wrap gap-1">
-                              {analysis.rhymeDensity.endRhymes.slice(0, 4).map((rhyme, index) => (
-                                <Badge key={index} variant="secondary" className="text-xs bg-accent-red/20 text-accent-red border-accent-red/30">
-                                  {rhyme}
-                                </Badge>
-                              ))}
-                              {analysis.rhymeDensity.endRhymes.length > 4 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{analysis.rhymeDensity.endRhymes.length - 4} more
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {analysis.rhymeDensity.internalRhymes.length > 0 && (
-                          <div>
-                            <h4 className="font-semibold mb-1 text-sm text-gray-300">Internal Rhymes:</h4>
-                            <div className="flex flex-wrap gap-1">
-                              {analysis.rhymeDensity.internalRhymes.slice(0, 3).map((rhyme, index) => (
-                                <Badge key={index} variant="outline" className="text-xs border-accent-red/40 text-gray-300">
-                                  {rhyme}
-                                </Badge>
-                              ))}
-                              {analysis.rhymeDensity.internalRhymes.length > 3 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{analysis.rhymeDensity.internalRhymes.length - 3}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-
-                  {/* Flow Analysis - Enhanced */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                  >
-                    <Card className="bg-secondary-dark border-2 border-accent-blue hover:border-accent-blue/70 transition-all hover:shadow-lg hover:shadow-accent-blue/20">
-                      <CardHeader>
-                        <CardTitle className="text-accent-blue flex items-center gap-2">
-                          <Zap className="w-5 h-5" />
-                          Flow Quality
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-orbitron font-bold mb-2 text-white">
-                          {analysis.flowAnalysis.score}
-                          <span className="text-sm text-gray-400">/100</span>
-                        </div>
-                        <Progress 
-                          value={analysis.flowAnalysis.score} 
-                          className="mb-3 h-2"
-                        />
-                        
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between items-center p-2 bg-black/30 rounded">
-                            <span className="text-gray-400">Rhythm:</span>
-                            <span className="font-semibold text-accent-blue">{analysis.flowAnalysis.rhythmConsistency}%</span>
-                          </div>
-                          <div className="p-2 bg-black/30 rounded">
-                            <span className="text-gray-400 block mb-1">Syllable Pattern:</span>
-                            <div className="font-mono text-xs text-accent-blue">
-                              {analysis.flowAnalysis.syllablePattern.join(' - ')}
-                            </div>
+                  {/* Creativity */}
+                  <Card className="bg-secondary-dark border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-accent-gold flex items-center gap-2">
+                        <Star className="w-4 h-4" />
+                        Creativity
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-xl font-semibold mb-2">
+                        {analysis.creativityAnalysis.score}/100
+                      </div>
+                      <Progress value={analysis.creativityAnalysis.score} className="mb-3" />
+                      
+                      {analysis.creativityAnalysis.detectedWordplay.length > 0 && (
+                        <div className="mb-2">
+                          <h4 className="font-semibold mb-1 text-sm">Wordplay:</h4>
+                          <div className="flex flex-wrap gap-1">
+                            {analysis.creativityAnalysis.detectedWordplay.slice(0, 2).map((wordplay, index) => (
+                              <Badge key={index} variant="secondary" className="text-xs">
+                                {wordplay}
+                              </Badge>
+                            ))}
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  </motion.div>
-
-                  {/* Creativity - Enhanced */}
-                  <motion.div
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 }}
-                  >
-                    <Card className="bg-secondary-dark border-2 border-accent-gold hover:border-accent-gold/70 transition-all hover:shadow-lg hover:shadow-accent-gold/20">
-                      <CardHeader>
-                        <CardTitle className="text-accent-gold flex items-center gap-2">
-                          <Star className="w-5 h-5" />
-                          Creativity
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-2xl font-orbitron font-bold mb-2 text-white">
-                          {analysis.creativityAnalysis.score}
-                          <span className="text-sm text-gray-400">/100</span>
+                      )}
+                      
+                      {analysis.creativityAnalysis.detectedMetaphors.length > 0 && (
+                        <div>
+                          <h4 className="font-semibold mb-1 text-sm">Metaphors:</h4>
+                          <div className="flex flex-wrap gap-1">
+                            {analysis.creativityAnalysis.detectedMetaphors.slice(0, 2).map((metaphor, index) => (
+                              <Badge key={index} variant="outline" className="text-xs">
+                                {metaphor}
+                              </Badge>
+                            ))}
+                          </div>
                         </div>
-                        <Progress 
-                          value={analysis.creativityAnalysis.score} 
-                          className="mb-3 h-2"
-                        />
-                        
-                        {analysis.creativityAnalysis.detectedWordplay.length > 0 && (
-                          <div className="mb-2">
-                            <h4 className="font-semibold mb-1 text-sm text-gray-300">Wordplay:</h4>
-                            <div className="flex flex-wrap gap-1">
-                              {analysis.creativityAnalysis.detectedWordplay.slice(0, 2).map((wordplay, index) => (
-                                <Badge key={index} variant="secondary" className="text-xs bg-accent-gold/20 text-accent-gold border-accent-gold/30">
-                                  {wordplay}
-                                </Badge>
-                              ))}
-                              {analysis.creativityAnalysis.detectedWordplay.length > 2 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{analysis.creativityAnalysis.detectedWordplay.length - 2}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {analysis.creativityAnalysis.detectedMetaphors.length > 0 && (
-                          <div>
-                            <h4 className="font-semibold mb-1 text-sm text-gray-300">Metaphors:</h4>
-                            <div className="flex flex-wrap gap-1">
-                              {analysis.creativityAnalysis.detectedMetaphors.slice(0, 2).map((metaphor, index) => (
-                                <Badge key={index} variant="outline" className="text-xs border-accent-gold/40 text-gray-300">
-                                  {metaphor}
-                                </Badge>
-                              ))}
-                              {analysis.creativityAnalysis.detectedMetaphors.length > 2 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{analysis.creativityAnalysis.detectedMetaphors.length - 2}
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </motion.div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
 
                 {/* Original Text */}

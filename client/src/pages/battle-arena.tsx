@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Mic, Trophy, Clock, Flame, Wifi, History, Share, Dumbbell, User, BarChart3, Zap, Star } from "lucide-react";
+import { Mic, Trophy, Clock, Flame, Wifi, History, Share, Dumbbell, User, BarChart3 } from "lucide-react";
 import { CharacterSelector } from "@/components/character-selector";
 import type { BattleCharacter } from "@shared/characters";
-import { cloneToBattleCharacter } from "@shared/characters";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +22,7 @@ import { motion, AnimatePresence } from "framer-motion";
 const battleArenaImage = "/images/Epic_rap_battle_arena_5a01b4d4.png";
 
 export default function BattleArena() {
-  const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard" | "nightmare" | "god">("normal");
+  const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard">("normal");
   const [profanityFilter, setProfanityFilter] = useState(false);
   const [lyricComplexity, setLyricComplexity] = useState(75);
   const [styleIntensity, setStyleIntensity] = useState(85);
@@ -205,31 +204,6 @@ export default function BattleArena() {
       // Cleanup all mobile scroll prevention
       cleanupFunctions.forEach(cleanup => cleanup());
     };
-  }, []);
-
-  // Check for URL parameter to pre-select clone opponent
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const opponent = urlParams.get('opponent');
-    
-    if (opponent && opponent.startsWith('clone_')) {
-      // Fetch clone data and auto-select it
-      fetch(`/api/clone/${opponent.replace('clone_', '')}`, {
-        credentials: 'include',
-      })
-        .then(res => res.json())
-        .then(clone => {
-          const cloneCharacter = cloneToBattleCharacter(clone);
-          setSelectedCharacter(cloneCharacter);
-          setShowCharacterSelector(false);
-          // Auto-start battle
-          startNewBattle(difficulty, profanityFilter, cloneCharacter.id, lyricComplexity, styleIntensity, advancedSettings.voiceSpeed);
-        })
-        .catch(err => {
-          console.error('Failed to load clone:', err);
-          setShowCharacterSelector(true);
-        });
-    }
   }, []);
 
   // Initialize new battle on component mount
@@ -468,9 +442,9 @@ export default function BattleArena() {
   };
 
   const handleDifficultyChange = (value: string) => {
-    setDifficulty(value as "easy" | "normal" | "hard" | "nightmare" | "god");
+    setDifficulty(value as "easy" | "normal" | "hard");
     if (currentBattleId) {
-      updateBattleState({ difficulty: value as "easy" | "normal" | "hard" | "nightmare" | "god" });
+      updateBattleState({ difficulty: value as "easy" | "normal" | "hard" });
     }
   };
 
@@ -632,101 +606,48 @@ export default function BattleArena() {
                       <SelectItem value="easy">Easy</SelectItem>
                       <SelectItem value="normal">Normal</SelectItem>
                       <SelectItem value="hard">Hard</SelectItem>
-                      <SelectItem value="nightmare">Nightmare</SelectItem>
-                      <SelectItem value="god">God Mode ✨</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               
-              {/* Enhanced Battle Score Display with Animations */}
+              {/* Enhanced Battle Score Display */}
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <motion.div 
-                    className="text-center bg-gradient-to-br from-secondary-dark/60 via-secondary-dark/40 to-secondary-dark/60 backdrop-blur-sm rounded-xl px-6 py-4 border-2 border-accent-blue/40 shadow-lg shadow-accent-blue/10"
-                    animate={battleState?.userScore ? { scale: [1, 1.05, 1] } : {}}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <div className="text-accent-blue font-semibold text-sm mb-1 flex items-center justify-center gap-1">
-                      <User className="w-4 h-4" />
-                      YOU
-                    </div>
-                    <motion.div 
-                      className="text-4xl font-orbitron font-bold text-white"
-                      data-testid="text-user-score"
-                      key={battleState?.userScore}
-                      initial={{ scale: 1.2, color: "#60a5fa" }}
-                      animate={{ scale: 1, color: "#ffffff" }}
-                      transition={{ duration: 0.4 }}
-                    >
+                  <div className="text-center bg-secondary-dark/30 backdrop-blur-sm rounded-lg px-6 py-4 border border-accent-blue/30">
+                    <div className="text-accent-blue font-semibold text-sm">YOU</div>
+                    <div className="text-3xl font-orbitron font-bold text-white" data-testid="text-user-score">
                       {battleState?.userScore || 0}
-                    </motion.div>
+                    </div>
                     <div className="text-xs text-gray-400 mt-1">
                       Round {battleState?.currentRound || 1} Score
                     </div>
-                    {battleState?.userScore && battleState.userScore > (battleState?.aiScore || 0) && (
-                      <Badge className="mt-2 bg-accent-blue/20 text-accent-blue border-accent-blue/40 text-xs">
-                        🔥 Leading
-                      </Badge>
-                    )}
-                  </motion.div>
-                  
-                  <div className="flex-1 mx-8">
-                    <div className="relative">
-                      <Progress 
-                        value={getProgressPercentage()} 
-                        className="h-4 bg-battle-gray shadow-inner"
-                        data-testid="progress-battle-score"
-                      />
-                      <motion.div 
-                        className="absolute inset-0 pointer-events-none"
-                        animate={{ opacity: [0.3, 0.6, 0.3] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                      >
-                        <div className="h-full bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-                      </motion.div>
-                    </div>
-                    <div className="text-center text-sm font-bold mt-2 text-accent-gold flex items-center justify-center gap-2">
-                      <Trophy className="w-4 h-4" />
-                      BATTLE SCORE
-                    </div>
-                    <motion.div 
-                      className="text-xs text-gray-400 text-center font-semibold"
-                      animate={{ opacity: [0.6, 1, 0.6] }}
-                      transition={{ duration: 1.5, repeat: Infinity }}
-                    >
-                      {(battleState?.userScore || 0) > (battleState?.aiScore || 0) ? "🎯 YOU LEAD" : 
-                       (battleState?.aiScore || 0) > (battleState?.userScore || 0) ? "⚔️ AI LEADS" : "⚖️ TIED"}
-                    </motion.div>
                   </div>
                   
-                  <motion.div 
-                    className="text-center bg-gradient-to-br from-secondary-dark/60 via-secondary-dark/40 to-secondary-dark/60 backdrop-blur-sm rounded-xl px-6 py-4 border-2 border-accent-red/40 shadow-lg shadow-accent-red/10"
-                    animate={battleState?.aiScore ? { scale: [1, 1.05, 1] } : {}}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <div className="text-accent-red font-semibold text-sm mb-1 flex items-center justify-center gap-1">
-                      🤖 AI BOT
+                  <div className="flex-1 mx-8 text-center">
+                    <Progress 
+                      value={getProgressPercentage()} 
+                      className="h-3 bg-battle-gray"
+                      data-testid="progress-battle-score"
+                    />
+                    <div className="text-center text-sm font-bold mt-2 text-accent-gold">
+                      BATTLE SCORE
                     </div>
-                    <motion.div 
-                      className="text-4xl font-orbitron font-bold text-white"
-                      data-testid="text-ai-score"
-                      key={battleState?.aiScore}
-                      initial={{ scale: 1.2, color: "#ef4444" }}
-                      animate={{ scale: 1, color: "#ffffff" }}
-                      transition={{ duration: 0.4 }}
-                    >
+                    <div className="text-xs text-gray-400">
+                      {(battleState?.userScore || 0) > (battleState?.aiScore || 0) ? "YOU LEAD" : 
+                       (battleState?.aiScore || 0) > (battleState?.userScore || 0) ? "AI LEADS" : "TIED"}
+                    </div>
+                  </div>
+                  
+                  <div className="text-center bg-secondary-dark/30 backdrop-blur-sm rounded-lg px-6 py-4 border border-accent-red/30">
+                    <div className="text-accent-red font-semibold text-sm">AI BOT</div>
+                    <div className="text-3xl font-orbitron font-bold text-white" data-testid="text-ai-score">
                       {battleState?.aiScore || 0}
-                    </motion.div>
+                    </div>
                     <div className="text-xs text-gray-400 mt-1">
                       Round {battleState?.currentRound || 1} Score
                     </div>
-                    {battleState?.aiScore && battleState.aiScore > (battleState?.userScore || 0) && (
-                      <Badge className="mt-2 bg-accent-red/20 text-accent-red border-accent-red/40 text-xs">
-                        ⚡ Leading
-                      </Badge>
-                    )}
-                  </motion.div>
+                  </div>
                 </div>
                 
                 {/* Round History */}
@@ -895,98 +816,46 @@ export default function BattleArena() {
                 disabled={isProcessing || battleState?.isAIResponding}
               />
 
-              {/* User Score Panel - Enhanced */}
-              <Card className="bg-gradient-to-br from-battle-gray/40 to-secondary-dark/40 backdrop-blur-sm border-2 border-accent-blue/30 shadow-xl">
+              {/* User Score Panel */}
+              <Card className="bg-battle-gray/30 backdrop-blur-sm border-gray-700">
                 <CardContent className="p-6">
-                  <h3 className="font-orbitron font-bold text-xl mb-4 text-accent-blue flex items-center gap-2">
-                    <Trophy className="inline" size={24} />
-                    Your Performance
+                  <h3 className="font-orbitron font-bold text-lg mb-4 text-accent-blue">
+                    <Trophy className="inline mr-2" size={20} />
+                    Your Stats
                   </h3>
                   
                   <div className="space-y-4">
-                    <motion.div 
-                      className="p-3 rounded-lg bg-black/20 border border-accent-red/20"
-                      whileHover={{ scale: 1.02, borderColor: "rgba(239, 68, 68, 0.4)" }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-gray-300 font-semibold flex items-center gap-2">
-                          <Flame className="w-4 h-4 text-accent-red" />
-                          Rhyme Density
-                        </span>
-                        <span className="text-lg font-orbitron font-bold text-accent-red" data-testid="text-rhyme-density">
-                          {userScores.rhymeDensity}%
-                        </span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Rhyme Density</span>
+                      <div className="flex items-center space-x-2">
+                        <Progress value={userScores.rhymeDensity} className="w-16 h-2" />
+                        <span className="text-sm font-semibold" data-testid="text-rhyme-density">{userScores.rhymeDensity}%</span>
                       </div>
-                      <Progress 
-                        value={userScores.rhymeDensity} 
-                        className="h-2 bg-gray-700"
-                      />
-                    </motion.div>
+                    </div>
                     
-                    <motion.div 
-                      className="p-3 rounded-lg bg-black/20 border border-accent-blue/20"
-                      whileHover={{ scale: 1.02, borderColor: "rgba(96, 165, 250, 0.4)" }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-gray-300 font-semibold flex items-center gap-2">
-                          <Zap className="w-4 h-4 text-accent-blue" />
-                          Flow Quality
-                        </span>
-                        <span className="text-lg font-orbitron font-bold text-accent-blue" data-testid="text-flow-quality">
-                          {userScores.flowQuality}%
-                        </span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Flow Quality</span>
+                      <div className="flex items-center space-x-2">
+                        <Progress value={userScores.flowQuality} className="w-16 h-2" />
+                        <span className="text-sm font-semibold" data-testid="text-flow-quality">{userScores.flowQuality}%</span>
                       </div>
-                      <Progress 
-                        value={userScores.flowQuality} 
-                        className="h-2 bg-gray-700"
-                      />
-                    </motion.div>
+                    </div>
                     
-                    <motion.div 
-                      className="p-3 rounded-lg bg-black/20 border border-accent-gold/20"
-                      whileHover={{ scale: 1.02, borderColor: "rgba(251, 191, 36, 0.4)" }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <div className="flex justify-between items-center mb-2">
-                        <span className="text-gray-300 font-semibold flex items-center gap-2">
-                          <Star className="w-4 h-4 text-accent-gold" />
-                          Creativity
-                        </span>
-                        <span className="text-lg font-orbitron font-bold text-accent-gold" data-testid="text-creativity">
-                          {userScores.creativity}%
-                        </span>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Creativity</span>
+                      <div className="flex items-center space-x-2">
+                        <Progress value={userScores.creativity} className="w-16 h-2" />
+                        <span className="text-sm font-semibold" data-testid="text-creativity">{userScores.creativity}%</span>
                       </div>
-                      <Progress 
-                        value={userScores.creativity} 
-                        className="h-2 bg-gray-700"
-                      />
-                    </motion.div>
+                    </div>
 
                     <div className="pt-4 border-t border-gray-600">
-                      <motion.div 
-                        className="text-center bg-gradient-to-r from-accent-blue/10 via-accent-gold/10 to-accent-red/10 rounded-lg p-4 border border-accent-gold/30"
-                        animate={{ boxShadow: ["0 0 0px rgba(251, 191, 36, 0.2)", "0 0 20px rgba(251, 191, 36, 0.4)", "0 0 0px rgba(251, 191, 36, 0.2)"] }}
-                        transition={{ duration: 2, repeat: Infinity }}
-                      >
-                        <div className="text-sm text-gray-400 mb-1 font-semibold">Total Score</div>
-                        <motion.div 
-                          className="text-4xl font-orbitron font-bold text-transparent bg-gradient-to-r from-accent-blue via-accent-gold to-accent-red bg-clip-text"
-                          data-testid="text-total-score"
-                          key={battleState?.userScore}
-                          animate={{ scale: [1, 1.1, 1] }}
-                          transition={{ duration: 0.5 }}
-                        >
+                      <div className="text-center">
+                        <div className="text-2xl font-orbitron font-bold text-accent-gold" data-testid="text-total-score">
                           {battleState?.userScore || 0}
-                        </motion.div>
-                        <div className="text-xs text-gray-400 mt-1">
-                          {battleState?.userScore && battleState.userScore >= 80 ? "🔥 Elite Performance!" :
-                           battleState?.userScore && battleState.userScore >= 60 ? "💪 Strong Showing!" :
-                           battleState?.userScore && battleState.userScore >= 40 ? "👍 Keep Building!" :
-                           "📈 Room to Grow"}
                         </div>
-                      </motion.div>
+                        <div className="text-sm text-gray-400">Total Score</div>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

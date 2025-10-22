@@ -12,6 +12,7 @@ import { scoringService } from "./services/scoring";
 import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
 import { matchmakingService } from "./services/matchmaking";
+import { realtimeAnalysisService } from "./services/realtime-analysis";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -1592,7 +1593,78 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Analyze lyrics endpoint for frontend
+  // Real-time analysis endpoint (fast, cached)
+  app.post('/api/realtime-analyze', isAuthenticated, async (req: any, res) => {
+    try {
+      const { text, includeML, isFinalScore, battleId } = req.body;
+
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ message: 'Text is required' });
+      }
+
+      console.log(`⚡ Real-time analysis requested for: "${text.substring(0, 50)}..."`);
+
+      const analysis = await realtimeAnalysisService.analyzeRealtime(text, {
+        includeML: includeML || false,
+        isFinalScore: isFinalScore || false,
+        battleId: battleId
+      });
+
+      res.json(analysis);
+
+    } catch (error: any) {
+      console.error('Real-time analysis error:', error);
+      res.status(500).json({ message: 'Real-time analysis failed' });
+    }
+  });
+
+  // Compare two verses endpoint
+  app.post('/api/compare-verses', isAuthenticated, async (req: any, res) => {
+    try {
+      const { verse1, verse2, includeML } = req.body;
+
+      if (!verse1 || !verse2) {
+        return res.status(400).json({ message: 'Both verses are required' });
+      }
+
+      console.log(`⚔️ Verse comparison requested`);
+
+      const comparison = await realtimeAnalysisService.compareVerses(
+        verse1, 
+        verse2, 
+        includeML || false
+      );
+
+      res.json(comparison);
+
+    } catch (error: any) {
+      console.error('Verse comparison error:', error);
+      res.status(500).json({ message: 'Verse comparison failed' });
+    }
+  });
+
+  // Batch analysis endpoint
+  app.post('/api/batch-analyze', isAuthenticated, async (req: any, res) => {
+    try {
+      const { verses } = req.body;
+
+      if (!Array.isArray(verses) || verses.length === 0) {
+        return res.status(400).json({ message: 'Verses array is required' });
+      }
+
+      console.log(`📦 Batch analysis for ${verses.length} verses`);
+
+      const results = await realtimeAnalysisService.batchAnalyze(verses);
+
+      res.json({ results, count: results.length });
+
+    } catch (error: any) {
+      console.error('Batch analysis error:', error);
+      res.status(500).json({ message: 'Batch analysis failed' });
+    }
+  });
+
+  // Analyze lyrics endpoint for frontend (legacy support)
   app.post('/api/analyze-lyrics', isAuthenticated, async (req: any, res) => {
     try {
       const { text } = req.body;
@@ -1601,26 +1673,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Text is required' });
       }
 
-      // Use the scoring service to analyze the lyrics
-      const dummyAiText = "Sample AI response for analysis";
-      const analysis = scoringService.scoreRound(text, dummyAiText);
+      // Use new real-time analysis service
+      const analysis = await realtimeAnalysisService.analyzeRealtime(text, {
+        includeML: false,
+        isFinalScore: false
+      });
 
+      // Format response for legacy compatibility
       const result = {
         rhymeDensity: analysis.rhymeDensity,
         flowQuality: analysis.flowQuality,
         creativity: analysis.creativity,
-        overallScore: analysis.userScore,
+        overallScore: analysis.score,
         breakdown: {
           vocabulary: Math.floor(analysis.creativity * 0.3),
           wordplay: Math.floor(analysis.creativity * 0.4),
           rhythm: Math.floor(analysis.flowQuality * 0.8),
           originality: Math.floor(analysis.creativity * 0.6)
         },
-        suggestions: [
-          analysis.userScore < 50 ? "Try adding more complex rhyme schemes" : "Great rhyme complexity!",
-          analysis.flowQuality < 60 ? "Work on syllable timing and rhythm" : "Excellent flow!",
-          analysis.creativity < 40 ? "Add more metaphors and wordplay" : "Creative wordplay detected!"
-        ]
+        suggestions: analysis.improvements,
+        feedback: analysis.feedback
       };
 
       res.json(result);

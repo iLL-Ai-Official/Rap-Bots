@@ -11,6 +11,7 @@ import { barkTTS } from "./services/bark";
 import { scoringService } from "./services/scoring";
 import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
+import { matchmakingService } from "./services/matchmaking";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -718,6 +719,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Random match battle endpoint
+  app.post("/api/battles/random-match", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { difficulty, preferredCharacters } = req.body;
+
+      console.log(`🎮 Random match requested by user ${userId}`);
+
+      // Check if user can start a battle
+      const canBattle = await storage.canUserStartBattle(userId);
+      if (!canBattle) {
+        return res.status(403).json({ 
+          message: "Battle limit reached. Upgrade to Premium or Pro for more battles!",
+          upgrade: true 
+        });
+      }
+
+      // Find random match
+      const match = await matchmakingService.findRandomMatch({
+        userId,
+        difficulty,
+        preferredCharacters,
+      });
+
+      // Create battle with random opponent
+      const battleData = {
+        userId,
+        difficulty: match.difficulty,
+        profanityFilter: false,
+        lyricComplexity: match.lyricComplexity,
+        styleIntensity: match.styleIntensity,
+        voiceSpeed: 1.0,
+        aiCharacterName: match.opponentName,
+        aiCharacterId: match.opponentCharacterId,
+        userScore: 0,
+        aiScore: 0,
+        rounds: [],
+        status: "active"
+      };
+
+      const battle = await storage.createBattle(battleData);
+      
+      console.log(`✅ Random match created: ${match.opponentName} vs User`);
+      
+      res.status(201).json({
+        battle,
+        match: {
+          opponentName: match.opponentName,
+          opponentId: match.opponentCharacterId,
+          difficulty: match.difficulty,
+        }
+      });
+    } catch (error: any) {
+      console.error("Error creating random match battle:", error);
+      res.status(500).json({ message: "Failed to create random match battle" });
+    }
+  });
+
   // Protected battle creation with subscription checks
   app.post("/api/battles", isAuthenticated, async (req: any, res) => {
     try {
@@ -869,11 +928,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/user/api-keys', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { openaiApiKey, groqApiKey, preferredTtsService } = req.body;
+      const { openaiApiKey, groqApiKey, elevenlabsApiKey, myshellApiKey, preferredTtsService } = req.body;
 
       const user = await storage.updateUserAPIKeys(userId, {
         openaiApiKey,
         groqApiKey,
+        elevenlabsApiKey,
+        myshellApiKey,
         preferredTtsService
       });
 
@@ -892,11 +953,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { service } = req.body;
 
-      if (!service || !['openai', 'groq'].includes(service)) {
+      if (!service || !['openai', 'groq', 'elevenlabs', 'myshell'].includes(service)) {
         return res.status(400).json({ message: "Invalid service specified" });
       }
 
-      const isValid = await userTTSManager.testUserAPIKey(userId, service as 'openai' | 'groq');
+      const isValid = await userTTSManager.testUserAPIKey(userId, service as 'openai' | 'groq' | 'elevenlabs' | 'myshell');
       res.json({ valid: isValid });
     } catch (error) {
       console.error(`Error testing ${req.body.service} API key:`, error);
@@ -1449,6 +1510,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Error starting tournament battle:', error);
       res.status(500).json({ message: 'Failed to start tournament battle', error: error.message });
+    }
+  });
+
+  // ML-powered lyric analysis endpoint
+  app.post('/api/ml-analyze-lyrics', isAuthenticated, async (req: any, res) => {
+    try {
+      const { text } = req.body;
+
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ message: 'Text is required' });
+      }
+
+      console.log(`🧠 ML-powered analysis requested for: "${text.substring(0, 50)}..."`);
+
+      // Use Groq's ML-powered analysis
+      const analysis = await groqService.analyzeLyricsWithML(text);
+
+      res.json({
+        ...analysis,
+        mlPowered: true,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('ML lyric analysis error:', error);
+      res.status(500).json({ message: 'ML analysis failed' });
+    }
+  });
+
+  // ML battle prediction endpoint
+  app.post('/api/ml-predict-battle', isAuthenticated, async (req: any, res) => {
+    try {
+      const { userLyrics, aiLyrics } = req.body;
+
+      if (!userLyrics || !aiLyrics) {
+        return res.status(400).json({ message: 'Both user and AI lyrics required' });
+      }
+
+      console.log(`🔮 ML battle prediction requested`);
+
+      // Use Groq's ML-powered prediction
+      const prediction = await groqService.predictBattleOutcome(userLyrics, aiLyrics);
+
+      res.json({
+        ...prediction,
+        mlPowered: true,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('ML battle prediction error:', error);
+      res.status(500).json({ message: 'ML prediction failed' });
+    }
+  });
+
+  // ML rhyme generation endpoint
+  app.post('/api/ml-generate-rhymes', isAuthenticated, async (req: any, res) => {
+    try {
+      const { seedWord, count } = req.body;
+
+      if (!seedWord || typeof seedWord !== 'string') {
+        return res.status(400).json({ message: 'Seed word is required' });
+      }
+
+      console.log(`🎵 ML rhyme generation for: ${seedWord}`);
+
+      // Use Groq's ML-powered rhyme generation
+      const rhymes = await groqService.generateMLRhymes(seedWord, count || 5);
+
+      res.json({
+        seedWord,
+        rhymes,
+        mlPowered: true,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('ML rhyme generation error:', error);
+      res.status(500).json({ message: 'ML rhyme generation failed' });
     }
   });
 

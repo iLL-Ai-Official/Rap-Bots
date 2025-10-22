@@ -1,6 +1,7 @@
 import { createOpenAITTS, OpenAITTSService } from './openai-tts';
 import { createGroqTTS, GroqTTSService } from './groq-tts';
 import { createElevenLabsTTS, ElevenLabsTTSService } from './elevenlabs-tts';
+import { createMyShellTTS, MyShellTTSService } from './myshell-tts';
 import { storage } from '../storage';
 
 export interface TTSGenerationOptions {
@@ -15,6 +16,7 @@ export class UserTTSManager {
   private openaiInstances = new Map<string, OpenAITTSService>();
   private groqInstances = new Map<string, GroqTTSService>();
   private elevenlabsInstances = new Map<string, ElevenLabsTTSService>();
+  private myshellInstances = new Map<string, MyShellTTSService>();
 
   private getOpenAIInstance(apiKey: string): OpenAITTSService {
     if (!this.openaiInstances.has(apiKey)) {
@@ -37,6 +39,14 @@ export class UserTTSManager {
     return this.elevenlabsInstances.get(apiKey)!;
   }
 
+  private getMyShellInstance(apiKey: string, voiceCloning: boolean = false): MyShellTTSService {
+    const key = `${apiKey}_${voiceCloning}`;
+    if (!this.myshellInstances.has(key)) {
+      this.myshellInstances.set(key, createMyShellTTS(apiKey, voiceCloning));
+    }
+    return this.myshellInstances.get(key)!;
+  }
+
   async generateTTS(
     text: string,
     userId: string,
@@ -51,7 +61,7 @@ export class UserTTSManager {
         throw new Error('User not found');
       }
 
-      const preferredService = user.preferredTtsService || 'elevenlabs';
+      const preferredService = user.preferredTtsService || 'myshell';
       console.log(`🎯 User ${userId} prefers: ${preferredService} TTS`);
 
       // FORCE CYPHER-9000 to use Groq for robotic voice
@@ -76,6 +86,27 @@ export class UserTTSManager {
       }
 
       // Try user's preferred service first
+      if (preferredService === 'myshell') {
+        try {
+          // Try user's MyShell API key first, then fallback to system key
+          const apiKey = user.myshellApiKey || process.env.MYSHELL_API_KEY;
+          if (apiKey) {
+            console.log(`🚀 Using ${user.myshellApiKey ? "user's" : "system"} MyShell AI TTS service with voice cloning`);
+            const myshellInstance = this.getMyShellInstance(apiKey, true);
+            return await myshellInstance.generateTTS(text, options.characterId, {
+              voiceStyle: options.voiceStyle,
+              characterName: options.characterName,
+              gender: options.gender,
+              speedMultiplier: options.speedMultiplier
+            });
+          } else {
+            console.log(`⚠️ No MyShell API key available (user or system)`);
+          }
+        } catch (error: any) {
+          console.log(`❌ MyShell AI TTS failed: ${error.message}, falling back`);
+        }
+      }
+
       if (preferredService === 'openai' && user.openaiApiKey) {
         try {
           console.log(`🚀 Using user's OpenAI TTS service`);
@@ -153,9 +184,25 @@ export class UserTTSManager {
     text: string, 
     options: TTSGenerationOptions
   ): Promise<{ audioUrl: string; duration: number }> {
-    console.log(`🔄 Using system TTS services (ElevenLabs/Groq/OpenAI priority)`);
+    console.log(`🔄 Using system TTS services (MyShell/ElevenLabs/Groq/OpenAI priority)`);
     
-    // Try system ElevenLabs first (premium quality if available)
+    // Try system MyShell AI first (voice cloning if available)
+    if (process.env.MYSHELL_API_KEY) {
+      try {
+        console.log(`🚀 Using system MyShell AI TTS with voice cloning...`);
+        const myshellInstance = this.getMyShellInstance(process.env.MYSHELL_API_KEY, true);
+        return await myshellInstance.generateTTS(text, options.characterId, {
+          voiceStyle: options.voiceStyle,
+          characterName: options.characterName,
+          gender: options.gender,
+          speedMultiplier: options.speedMultiplier
+        });
+      } catch (error: any) {
+        console.log(`❌ System MyShell AI TTS failed: ${error.message}`);
+      }
+    }
+    
+    // Try system ElevenLabs second (premium quality if available)
     if (process.env.ELEVENLABS_API_KEY) {
       try {
         console.log(`🚀 Using system ElevenLabs TTS (premium)...`);
@@ -212,7 +259,7 @@ export class UserTTSManager {
   }
 
   // Test a user's API key
-  async testUserAPIKey(userId: string, service: 'openai' | 'groq' | 'elevenlabs'): Promise<boolean> {
+  async testUserAPIKey(userId: string, service: 'openai' | 'groq' | 'elevenlabs' | 'myshell'): Promise<boolean> {
     const user = await storage.getUser(userId);
     if (!user) return false;
 
@@ -233,6 +280,11 @@ export class UserTTSManager {
         return await instance.testConnection();
       }
 
+      if (service === 'myshell' && user.myshellApiKey) {
+        const instance = this.getMyShellInstance(user.myshellApiKey, true);
+        return await instance.testConnection();
+      }
+
       return false;
     } catch (error) {
       console.error(`API key test failed for ${service}:`, error);
@@ -247,7 +299,8 @@ export class UserTTSManager {
     this.openaiInstances.clear();
     this.groqInstances.clear();
     this.elevenlabsInstances.clear();
-    console.log(`🧹 Cleared all TTS instances cache (OpenAI, Groq, ElevenLabs)`);
+    this.myshellInstances.clear();
+    console.log(`🧹 Cleared all TTS instances cache (OpenAI, Groq, ElevenLabs, MyShell)`);
   }
 }
 

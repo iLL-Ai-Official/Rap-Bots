@@ -9,10 +9,13 @@ import { apiRequest } from '@/lib/queryClient';
 import { Loader2, Zap, Crown } from 'lucide-react';
 const subscribeImage = "/images/Premium_subscription_interface_c2661c50.png";
 
-if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-  throw new Error('Missing required Stripe key: VITE_STRIPE_PUBLIC_KEY');
+const stripePromise = import.meta.env.VITE_STRIPE_PUBLIC_KEY 
+  ? loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY)
+  : null;
+
+if (!stripePromise) {
+  console.warn('⚠️ VITE_STRIPE_PUBLIC_KEY not provided - Payment features will be unavailable');
 }
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
 
 interface PaymentFormProps {
   tier?: 'premium' | 'pro';
@@ -543,9 +546,21 @@ export default function Subscribe() {
           </div>
         </CardHeader>
         <CardContent>
-          <Elements stripe={stripePromise} options={stripeOptions}>
-            <PaymentForm tier={tier} paymentMethod={paymentMethod} purchaseType={purchaseType} battleCount={purchaseType === 'battles' ? 4 : undefined} />
-          </Elements>
+          {!stripePromise && paymentMethod === 'stripe' ? (
+            <div className="bg-yellow-900/20 border border-yellow-500/50 rounded-lg p-6 text-center space-y-4" data-testid="alert-stripe-unavailable">
+              <h3 className="text-yellow-400 font-semibold text-lg">⚠️ Payment System Unavailable</h3>
+              <p className="text-gray-300 text-sm">
+                Stripe payment processing is not configured in this environment. 
+              </p>
+              <p className="text-gray-400 text-xs">
+                Please try CashApp payment option or contact support.
+              </p>
+            </div>
+          ) : (
+            <Elements stripe={stripePromise} options={stripeOptions}>
+              <PaymentForm tier={tier} paymentMethod={paymentMethod} purchaseType={purchaseType} battleCount={purchaseType === 'battles' ? 4 : undefined} />
+            </Elements>
+          )}
         </CardContent>
       </Card>
     </div>

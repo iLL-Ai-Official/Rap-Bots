@@ -12,6 +12,7 @@ import { scoringService } from "./services/scoring";
 import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
 import { FineTuningService } from "./services/fine-tuning";
+import { mlRapperCloningService } from "./services/ml-rapper-cloning";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -2185,6 +2186,185 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ 
         message: error instanceof Error ? error.message : 'Failed to fetch training data' 
       });
+    }
+  });
+
+  // ML Rapper Cloning API Endpoints
+  
+  // Generate lyrics in a specific rapper's style
+  app.post('/api/ml/style-transfer', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { rapperName, style, bars, theme, opponentName, prompt } = req.body;
+
+      // Rate limiting: Check if user can make ML requests
+      const canBattle = await storage.canUserStartBattle(userId);
+      if (!canBattle) {
+        return res.status(403).json({ 
+          message: "ML request limit reached. Upgrade to Premium or Pro for more features!",
+          upgrade: true 
+        });
+      }
+
+      // Validate inputs
+      if (!rapperName || !style) {
+        return res.status(400).json({ message: 'Rapper name and style are required' });
+      }
+
+      const validStyles = ['technical', 'smooth', 'creative', 'aggressive', 'storyteller'];
+      if (!validStyles.includes(style)) {
+        return res.status(400).json({ message: 'Invalid style. Must be: technical, smooth, creative, aggressive, or storyteller' });
+      }
+
+      const barsCount = bars && bars > 0 && bars <= 32 ? bars : 16;
+
+      // Create rapper profile
+      const rapperProfile = {
+        name: rapperName,
+        style: style as any,
+        characteristics: {
+          avgSyllablesPerBar: style === 'technical' ? 14 : style === 'smooth' ? 10 : 12,
+          rhymeComplexity: style === 'technical' ? 0.9 : style === 'creative' ? 0.8 : 0.6,
+          flowVariation: style === 'technical' || style === 'creative' ? 0.8 : 0.5,
+          wordplayFrequency: style === 'technical' || style === 'aggressive' ? 0.8 : 0.5,
+          metaphorDensity: style === 'creative' || style === 'storyteller' ? 0.9 : 0.5,
+          battleTactics: style === 'aggressive' ? ['confrontational', 'punchlines', 'attacks'] : 
+                        style === 'technical' ? ['complex schemes', 'wordplay', 'multi-syllables'] :
+                        ['imagery', 'flow', 'delivery']
+        }
+      };
+
+      console.log(`🎤 Generating ${barsCount}-bar verse in ${rapperName}'s ${style} style...`);
+      
+      const lyrics = await mlRapperCloningService.generateStyledLyrics({
+        prompt: prompt || `Write a ${barsCount}-bar verse`,
+        targetRapper: rapperName,
+        rapperProfile,
+        bars: barsCount,
+        theme,
+        opponentName
+      });
+
+      res.json({
+        lyrics,
+        rapperName,
+        style,
+        bars: barsCount,
+        profile: rapperProfile
+      });
+
+    } catch (error) {
+      console.error('Error in style transfer:', error);
+      res.status(500).json({ message: 'Failed to generate styled lyrics' });
+    }
+  });
+
+  // Analyze beat and align lyrics for flow modeling
+  app.post('/api/ml/beat-alignment', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { lyrics, bpm, timeSignature, genre } = req.body;
+
+      // Rate limiting: Check if user can make ML requests
+      const canBattle = await storage.canUserStartBattle(userId);
+      if (!canBattle) {
+        return res.status(403).json({ 
+          message: "ML request limit reached. Upgrade to Premium or Pro for more features!",
+          upgrade: true 
+        });
+      }
+
+      if (!lyrics || !bpm) {
+        return res.status(400).json({ message: 'Lyrics and BPM are required' });
+      }
+
+      if (bpm < 60 || bpm > 200) {
+        return res.status(400).json({ message: 'BPM must be between 60 and 200' });
+      }
+
+      const beatContext = {
+        bpm,
+        timeSignature: timeSignature || '4/4',
+        genre: genre || 'hip-hop'
+      };
+
+      console.log(`🎵 Aligning lyrics to ${bpm} BPM beat...`);
+      
+      const flowModeling = await mlRapperCloningService.alignToBeat(lyrics, beatContext);
+
+      res.json({
+        flowModeling,
+        beatContext,
+        totalDuration: flowModeling.timing.length > 0 
+          ? flowModeling.timing[flowModeling.timing.length - 1].startTime + 
+            flowModeling.timing[flowModeling.timing.length - 1].duration 
+          : 0
+      });
+
+    } catch (error) {
+      console.error('Error in beat alignment:', error);
+      res.status(500).json({ message: 'Failed to align lyrics to beat' });
+    }
+  });
+
+  // Create rapper profile from user's battle history
+  app.post('/api/ml/create-profile', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+
+      // Rate limiting: Profile creation is less expensive, but still limit it
+      const canBattle = await storage.canUserStartBattle(userId);
+      if (!canBattle) {
+        return res.status(403).json({ 
+          message: "ML request limit reached. Upgrade to Premium or Pro for more features!",
+          upgrade: true 
+        });
+      }
+
+      console.log(`📊 Creating rapper profile from battle history for user ${userId}...`);
+      
+      // Get user's recent battles
+      const battles = await storage.getUserBattles(userId, 10);
+
+      if (battles.length === 0) {
+        // Create default profile for new users
+        const defaultProfile = {
+          name: `User_${userId.substring(0, 8)}`,
+          style: 'smooth' as const,
+          characteristics: {
+            avgSyllablesPerBar: 12,
+            rhymeComplexity: 0.5,
+            flowVariation: 0.5,
+            wordplayFrequency: 0.5,
+            metaphorDensity: 0.5,
+            battleTactics: []
+          }
+        };
+
+        return res.json({
+          profile: defaultProfile,
+          battlesAnalyzed: 0,
+          message: 'Default profile created. Battle more to develop your unique style!'
+        });
+      }
+
+      // Map battles to format expected by ML service
+      const battlesData = battles.map(b => ({
+        userVerse: b.rounds?.[0]?.userText || '',
+        aiVerse: b.rounds?.[0]?.aiResponse || ''
+      })).filter(b => b.userVerse);
+
+      const profile = await mlRapperCloningService.createProfileFromHistory(userId, battlesData);
+
+      res.json({
+        profile,
+        battlesAnalyzed: battles.length,
+        message: `Profile created from ${battles.length} battle${battles.length > 1 ? 's' : ''}`
+      });
+
+    } catch (error) {
+      console.error('Error creating rapper profile:', error);
+      res.status(500).json({ message: 'Failed to create rapper profile' });
     }
   });
 

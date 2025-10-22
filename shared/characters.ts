@@ -6,7 +6,7 @@ export interface BattleCharacter {
   gender: 'male' | 'female';
   personality: string;
   style: string;
-  difficulty: 'easy' | 'normal' | 'hard' | 'nightmare';
+  difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' | 'god';
   backstory: string;
   signature: string;
   avatar?: string;
@@ -91,11 +91,12 @@ export const cloneToBattleCharacter = (clone: {
   voiceId: string | null;
 }): BattleCharacter => {
   // Map skill level to difficulty
-  let difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' = 'normal';
+  let difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' | 'god' = 'normal';
   if (clone.skillLevel < 40) difficulty = 'easy';
   else if (clone.skillLevel >= 40 && clone.skillLevel < 65) difficulty = 'normal';
   else if (clone.skillLevel >= 65 && clone.skillLevel < 85) difficulty = 'hard';
-  else difficulty = 'nightmare';
+  else if (clone.skillLevel >= 85 && clone.skillLevel < 95) difficulty = 'nightmare';
+  else difficulty = 'god'; // 95+ is god-tier
 
   return {
     id: `clone_${clone.id}`,

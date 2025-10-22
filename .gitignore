@@ -23,6 +23,8 @@ bark/
 .cache/
 .tmp/
 temp_audio/
+temp_cards/
+temp_profiles/
 tmp/
 
 # Python cache and libraries

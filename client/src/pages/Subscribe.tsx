@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useStripe, useElements, PaymentElement, Elements } from '@stripe/react-stripe-js';
-import { loadStripe } from '@stripe/stripe-js';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,10 +9,10 @@ import { apiRequest } from '@/lib/queryClient';
 import { Loader2, Zap, Crown } from 'lucide-react';
 const subscribeImage = "/images/Premium_subscription_interface_c2661c50.png";
 
-if (!import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-  throw new Error('Missing required Stripe key: VITE_STRIPE_PUBLIC_KEY');
-}
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY);
+// Make Stripe optional - only load if public key is available
+const stripePromise: Promise<Stripe | null> | null = import.meta.env.VITE_STRIPE_PUBLIC_KEY
+  ? loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY)
+  : null;
 
 interface PaymentFormProps {
   tier?: 'premium' | 'pro';
@@ -543,9 +543,16 @@ export default function Subscribe() {
           </div>
         </CardHeader>
         <CardContent>
-          <Elements stripe={stripePromise} options={stripeOptions}>
-            <PaymentForm tier={tier} paymentMethod={paymentMethod} purchaseType={purchaseType} battleCount={purchaseType === 'battles' ? 4 : undefined} />
-          </Elements>
+          {stripePromise ? (
+            <Elements stripe={stripePromise} options={stripeOptions}>
+              <PaymentForm tier={tier} paymentMethod={paymentMethod} purchaseType={purchaseType} battleCount={purchaseType === 'battles' ? 4 : undefined} />
+            </Elements>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-yellow-400 mb-4">Payment processing is currently unavailable.</p>
+              <p className="text-gray-400 text-sm">Please contact support or try CashApp payment option.</p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

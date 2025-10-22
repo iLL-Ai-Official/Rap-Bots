@@ -26,10 +26,14 @@ const upload = multer({
   },
 });
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+// Initialize Stripe only if the secret key is provided
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
+
+if (!stripe) {
+  console.warn('⚠️ Stripe not configured - payment features will be disabled');
 }
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Service Worker endpoint for PWA functionality
@@ -159,6 +163,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clientSecret: `cashapp_battles_cs_${Date.now()}_${userId}`,
           amount: packageInfo.price,
           description: packageInfo.description
+        });
+      }
+
+      // Check if Stripe is configured for card payments
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment processing is currently unavailable. Please contact support.' 
         });
       }
 
@@ -363,6 +374,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // One-time payment intent (like ThcaStore's approach)
   app.post("/api/create-payment-intent", isAuthenticated, async (req: any, res) => {
     try {
+      // Check if Stripe is configured
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment processing is currently unavailable. Please contact support.' 
+        });
+      }
+
       const { amount, description = "Battle pack purchase" } = req.body;
       const userId = req.user.claims.sub;
 
@@ -402,6 +420,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({
           subscriptionId: `cashapp_${tier}_${Date.now()}`,
           clientSecret: `cashapp_cs_${Date.now()}_${userId}`,
+        });
+      }
+
+      // Check if Stripe is configured for card payments
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment processing is currently unavailable. Please contact support.' 
         });
       }
 
@@ -541,6 +566,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Stripe webhook for payment updates (subscriptions + one-time purchases)
   app.post('/api/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => {
+    // Check if Stripe is configured
+    if (!stripe) {
+      console.warn('⚠️ Stripe webhook called but Stripe is not configured');
+      return res.status(503).json({ 
+        message: 'Payment processing is currently unavailable.' 
+      });
+    }
+
     let event;
 
     try {

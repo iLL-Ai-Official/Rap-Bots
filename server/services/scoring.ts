@@ -10,6 +10,23 @@ export class ScoringService {
   }
 
   calculateRhymeDensity(text: string, isFinalScore: boolean = false, battleId?: string): number {
+    // REALISTIC SCALING: Minimal scores for minimal content
+    const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+    const wordCount = words.length;
+    
+    // One word gets almost nothing
+    if (wordCount <= 1) {
+      console.log(`🎵 Single word detected - minimal score`);
+      return Math.min(5, wordCount * 3);
+    }
+    
+    // Very short input (2-3 words) gets very low score
+    if (wordCount <= 3) {
+      console.log(`🎵 Very short input (${wordCount} words) - low score cap`);
+      const baseScore = wordCount * 5;
+      return Math.min(15, baseScore);
+    }
+    
     // Use the advanced phonetic analyzer for accurate rhyme detection
     const rhymeAnalysis = this.phoneticAnalyzer.getEnhancedRhymeAnalysis(text, isFinalScore, battleId);
     
@@ -28,14 +45,41 @@ export class ScoringService {
       multiSyllabicScore + assonanceScore + consonanceScore
     );
     
-    console.log(`🎵 Rhyme density breakdown: Perfect ${perfectRhymeScore}/35, Slant ${slantRhymeScore}/15, Internal ${internalRhymeScore}/20, Multi-syll ${multiSyllabicScore}/15, Assonance ${assonanceScore}/10, Consonance ${consonanceScore}/5`);
+    // REALISTIC CONTENT LENGTH SCALING
+    // Short inputs (4-8 words) get capped at 60% of calculated score
+    // Medium inputs (9-15 words) get capped at 80% of calculated score
+    // Full inputs (16+ words) get full score potential
+    let lengthMultiplier = 1.0;
+    if (wordCount < 9) {
+      lengthMultiplier = 0.6;
+      console.log(`🎵 Short content (${wordCount} words) - 60% score cap`);
+    } else if (wordCount < 16) {
+      lengthMultiplier = 0.8;
+      console.log(`🎵 Medium content (${wordCount} words) - 80% score cap`);
+    }
     
-    return Math.min(100, totalScore);
+    const scaledScore = Math.round(totalScore * lengthMultiplier);
+    
+    console.log(`🎵 Rhyme density breakdown: Perfect ${perfectRhymeScore}/35, Slant ${slantRhymeScore}/15, Internal ${internalRhymeScore}/20, Multi-syll ${multiSyllabicScore}/15, Assonance ${assonanceScore}/10, Consonance ${consonanceScore}/5, Length multiplier: ${lengthMultiplier}x`);
+    
+    return Math.min(100, scaledScore);
   }
 
   calculateFlowQuality(text: string, isFinalScore: boolean = false, battleId?: string): number {
     const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-    console.log(`🎵 Analyzing ${isFinalScore ? 'FINAL' : 'preview'} flow quality for ${words.length} words...`);
+    const wordCount = words.length;
+    console.log(`🎵 Analyzing ${isFinalScore ? 'FINAL' : 'preview'} flow quality for ${wordCount} words...`);
+    
+    // REALISTIC SCALING: Minimal scores for minimal content
+    if (wordCount <= 1) {
+      console.log(`🎵 Single word - no flow to analyze`);
+      return 0;
+    }
+    
+    if (wordCount <= 3) {
+      console.log(`🎵 Very short input (${wordCount} words) - minimal flow score`);
+      return Math.min(10, wordCount * 3);
+    }
     
     // Get advanced phonetic analysis for authentic flow scoring
     const rhymeAnalysis = this.phoneticAnalyzer.getEnhancedRhymeAnalysis(text, isFinalScore, battleId);
@@ -74,9 +118,22 @@ export class ScoringService {
       internalFlowScore + multiSyllableFlowScore
     );
     
-    console.log(`🎵 Flow breakdown: Rhythm ${rhythmScore}/35, Syllables ${syllableFlowScore}/25, Phonetic ${phoneticFlowScore}/20, Internal ${internalFlowScore}/10, Multi-syll ${multiSyllableFlowScore}/10`);
+    // REALISTIC CONTENT LENGTH SCALING for flow
+    // Short inputs need more words to establish flow patterns
+    let lengthMultiplier = 1.0;
+    if (wordCount < 9) {
+      lengthMultiplier = 0.5;
+      console.log(`🎵 Short content (${wordCount} words) - flow limited to 50%`);
+    } else if (wordCount < 16) {
+      lengthMultiplier = 0.75;
+      console.log(`🎵 Medium content (${wordCount} words) - flow limited to 75%`);
+    }
     
-    return Math.min(100, totalScore);
+    const scaledScore = Math.round(totalScore * lengthMultiplier);
+    
+    console.log(`🎵 Flow breakdown: Rhythm ${rhythmScore}/35, Syllables ${syllableFlowScore}/25, Phonetic ${phoneticFlowScore}/20, Internal ${internalFlowScore}/10, Multi-syll ${multiSyllableFlowScore}/10, Length multiplier: ${lengthMultiplier}x`);
+    
+    return Math.min(100, scaledScore);
   }
 
   private countAdvancedSyllables(line: string, useAdvanced: boolean): number {
@@ -105,9 +162,21 @@ export class ScoringService {
 
   calculateCreativity(text: string, isFinalScore: boolean = false, battleId?: string): number {
     const words = text.toLowerCase().split(/\s+/).filter(w => w.length > 0);
+    const wordCount = words.length;
+    
+    // REALISTIC SCALING: Minimal scores for minimal content
+    if (wordCount <= 1) {
+      console.log(`🎭 Single word - minimal creativity score`);
+      return Math.min(5, wordCount * 2);
+    }
+    
+    if (wordCount <= 3) {
+      console.log(`🎭 Very short input (${wordCount} words) - low creativity cap`);
+      return Math.min(12, wordCount * 4);
+    }
     
     // COMPREHENSIVE ANALYSIS - analyze everything regardless of length
-    console.log(`🎭 Analyzing ${words.length} words for creativity ${isFinalScore ? 'FINAL SCORE' : 'preview'}...`);
+    console.log(`🎭 Analyzing ${wordCount} words for creativity ${isFinalScore ? 'FINAL SCORE' : 'preview'}...`);
     
     const lines = text.split('\n').filter(line => line.trim());
     
@@ -149,9 +218,22 @@ export class ScoringService {
       punchlineScore + homonymScore + rhythmScore + originalityScore
     );
     
-    console.log(`🎭 Creativity breakdown: Vocab Complexity ${vocabularyComplexity}/20, Diversity ${phoneticallyEnhancedDiversity}/15, Wordplay ${wordplayScore}/20, Figurative ${figurativeScore}/15, Punchlines ${punchlineScore}/50, Homonyms ${homonymScore}/10, Rhythm ${rhythmScore}/10, Originality ${originalityScore}/15`);
+    // REALISTIC CONTENT LENGTH SCALING for creativity
+    // Creativity requires substance to shine
+    let lengthMultiplier = 1.0;
+    if (wordCount < 9) {
+      lengthMultiplier = 0.55;
+      console.log(`🎭 Short content (${wordCount} words) - creativity limited to 55%`);
+    } else if (wordCount < 16) {
+      lengthMultiplier = 0.75;
+      console.log(`🎭 Medium content (${wordCount} words) - creativity limited to 75%`);
+    }
     
-    return Math.min(100, totalScore + (isFinalScore ? 5 : 0)); // Bonus for final score processing
+    const scaledScore = Math.round(totalScore * lengthMultiplier);
+    
+    console.log(`🎭 Creativity breakdown: Vocab Complexity ${vocabularyComplexity}/20, Diversity ${phoneticallyEnhancedDiversity}/15, Wordplay ${wordplayScore}/20, Figurative ${figurativeScore}/15, Punchlines ${punchlineScore}/50, Homonyms ${homonymScore}/10, Rhythm ${rhythmScore}/10, Originality ${originalityScore}/15, Length multiplier: ${lengthMultiplier}x`);
+    
+    return Math.min(100, scaledScore + (isFinalScore ? 5 : 0)); // Bonus for final score processing
   }
 
   private detectWordplay(text: string): number {

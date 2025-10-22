@@ -302,62 +302,76 @@ export function useSFXManager(): SFXManagerHook {
     };
   }, [stopAllSFX]);
 
-  // REAL-TIME word-triggered crowd reactions
+  // REAL-TIME word-triggered crowd reactions - Enhanced for mid-performance triggering
   const analyzeWordsForTriggers = useCallback((words: string) => {
     if (!config.crowdReactions.enabled) return;
     
     const lowerWords = words.toLowerCase();
     console.log(`🎯 REAL-TIME word analysis: "${words}"`);
     
-    // DESTRUCTION WORDS - Instant wild reaction
-    const destructionWords = /\b(kill|murder|destroy|demolish|wreck|finish|slay|slaughter|massacre|eliminate|annihilate|obliterate|devastate|erase|delete)\b/i;
-    if (destructionWords.test(lowerWords)) {
-      console.log('🔥 DESTRUCTION WORD DETECTED - Wild crowd reaction!');
-      playCrowdReaction('wild');
-      return;
-    }
+    // ENHANCED: Split into phrases for more natural mid-performance reactions
+    const phrases = words.split(/[.!?,;\n]/).filter(p => p.trim().length > 0);
     
-    // VICTORY WORDS - Instant wild reaction
-    const victoryWords = /\b(mic drop|game over|checkmate|done deal|case closed|lights out|victory|winner|champion|conquered|dominated|owned)\b/i;
-    if (victoryWords.test(lowerWords)) {
-      console.log('🏆 VICTORY WORD DETECTED - Wild crowd reaction!');
-      playCrowdReaction('wild');
-      return;
-    }
+    // Analyze each phrase separately for real-time triggering
+    phrases.forEach((phrase, index) => {
+      const delay = index * 800; // Stagger reactions naturally throughout performance
+      
+      setTimeout(() => {
+        const lowerPhrase = phrase.toLowerCase();
+        
+        // DESTRUCTION WORDS - Instant wild reaction
+        const destructionWords = /\b(kill|murder|destroy|demolish|wreck|finish|slay|slaughter|massacre|eliminate|annihilate|obliterate|devastate|erase|delete)\b/i;
+        if (destructionWords.test(lowerPhrase)) {
+          console.log(`🔥 DESTRUCTION WORD DETECTED in phrase - Wild crowd reaction!`);
+          playCrowdReaction('wild');
+          return;
+        }
+        
+        // VICTORY WORDS - Instant wild reaction
+        const victoryWords = /\b(mic drop|game over|checkmate|done deal|case closed|lights out|victory|winner|champion|conquered|dominated|owned)\b/i;
+        if (victoryWords.test(lowerPhrase)) {
+          console.log(`🏆 VICTORY WORD DETECTED in phrase - Wild crowd reaction!`);
+          playCrowdReaction('wild');
+          return;
+        }
+        
+        // HEAT WORDS - Medium reaction
+        const heatWords = /\b(fire|flames|burning|heat|blazing|inferno|torch|roast|hot|heated|steaming|smoking|sizzling|scorching)\b/i;
+        if (heatWords.test(lowerPhrase)) {
+          console.log(`🔥 HEAT WORD DETECTED in phrase - Medium crowd reaction!`);
+          playCrowdReaction('medium');
+          return;
+        }
+        
+        // INTENSITY WORDS - Medium reaction
+        const intensityWords = /\b(savage|brutal|ruthless|vicious|deadly|lethal|killer|beast|monster|demon|devil|nightmare|terror|horror)\b/i;
+        if (intensityWords.test(lowerPhrase)) {
+          console.log(`⚡ INTENSITY WORD DETECTED in phrase - Medium crowd reaction!`);
+          playCrowdReaction('medium');
+          return;
+        }
+        
+        // BATTLE WORDS - Mild reaction
+        const battleWords = /\b(step to me|come at me|try me|test me|bring it|face me|challenge|next level|different league|schooling|amateur)\b/i;
+        if (battleWords.test(lowerPhrase)) {
+          console.log(`⚔️ BATTLE WORD DETECTED in phrase - Mild crowd reaction!`);
+          playCrowdReaction('mild');
+          return;
+        }
+        
+        // PERSONAL ATTACK WORDS - Shocked gasps
+        const attackWords = /\b(your mama|your girl|your crew|your family|weak|trash|garbage|pathetic|terrible|awful|wack|basic|lame)\b/i;
+        if (attackWords.test(lowerPhrase)) {
+          console.log(`💀 ATTACK WORD DETECTED in phrase - Shocked reaction!`);
+          playCrowdReaction('medium'); // Use medium for shocked gasps
+          return;
+        }
+      }, delay);
+    });
     
-    // HEAT WORDS - Medium reaction
-    const heatWords = /\b(fire|flames|burning|heat|blazing|inferno|torch|roast|hot|heated|steaming|smoking|sizzling|scorching)\b/i;
-    if (heatWords.test(lowerWords)) {
-      console.log('🔥 HEAT WORD DETECTED - Medium crowd reaction!');
-      playCrowdReaction('medium');
-      return;
+    if (phrases.length === 0) {
+      console.log('🤫 No trigger words found - crowd stays silent');
     }
-    
-    // INTENSITY WORDS - Medium reaction
-    const intensityWords = /\b(savage|brutal|ruthless|vicious|deadly|lethal|killer|beast|monster|demon|devil|nightmare|terror|horror)\b/i;
-    if (intensityWords.test(lowerWords)) {
-      console.log('⚡ INTENSITY WORD DETECTED - Medium crowd reaction!');
-      playCrowdReaction('medium');
-      return;
-    }
-    
-    // BATTLE WORDS - Mild reaction
-    const battleWords = /\b(step to me|come at me|try me|test me|bring it|face me|challenge|next level|different league|schooling|amateur)\b/i;
-    if (battleWords.test(lowerWords)) {
-      console.log('⚔️ BATTLE WORD DETECTED - Mild crowd reaction!');
-      playCrowdReaction('mild');
-      return;
-    }
-    
-    // PERSONAL ATTACK WORDS - Shocked gasps
-    const attackWords = /\b(your mama|your girl|your crew|your family|weak|trash|garbage|pathetic|terrible|awful|wack|basic|lame)\b/i;
-    if (attackWords.test(lowerWords)) {
-      console.log('💀 ATTACK WORD DETECTED - Shocked reaction!');
-      playCrowdReaction('medium'); // Use medium for shocked gasps
-      return;
-    }
-    
-    console.log('🤫 No trigger words found - crowd stays silent');
   }, [config.crowdReactions.enabled, playCrowdReaction]);
 
   // Intelligent crowd reaction based on lyrical content

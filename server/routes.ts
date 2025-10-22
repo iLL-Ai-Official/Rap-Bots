@@ -11,6 +11,7 @@ import { barkTTS } from "./services/bark";
 import { scoringService } from "./services/scoring";
 import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
+import { characterCardGenerator } from "./services/characterCardGenerator";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -1620,6 +1621,170 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error uploading SFX files:', error);
       res.status(500).json({ error: 'Failed to upload SFX files' });
+    }
+  });
+
+  // User profile routes
+  app.get('/api/profile/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Return public profile data
+      const profile = {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl,
+        bio: user.bio,
+        rapStyle: user.rapStyle,
+        totalBattles: user.totalBattles,
+        totalWins: user.totalWins,
+        characterCardUrl: user.characterCardUrl,
+        characterCardData: user.characterCardData,
+        createdAt: user.createdAt,
+      };
+
+      res.json(profile);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      res.status(500).json({ message: 'Failed to fetch profile' });
+    }
+  });
+
+  app.put('/api/profile', isAuthenticated, upload.single('profileImage'), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { bio, rapStyle } = req.body;
+
+      // Update user profile
+      const updates: any = {};
+      if (bio !== undefined) updates.bio = bio;
+      if (rapStyle !== undefined) updates.rapStyle = rapStyle;
+      
+      await storage.updateUser(userId, updates);
+
+      // If profile image was uploaded, update profile image
+      if (req.file?.buffer) {
+        // Save profile image
+        const tempDir = path.join(process.cwd(), 'temp_profiles');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        const timestamp = Date.now();
+        const imagePath = path.join(tempDir, `profile_${userId}_${timestamp}.png`);
+        fs.writeFileSync(imagePath, req.file.buffer);
+
+        const profileImageUrl = `/api/profile-images/${userId}_${timestamp}.png`;
+        await storage.updateUser(userId, { profileImageUrl });
+      }
+
+      const updatedUser = await storage.getUser(userId);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      res.status(500).json({ message: 'Failed to update profile' });
+    }
+  });
+
+  // Character card generation
+  app.post('/api/generate-character-card', isAuthenticated, upload.single('image'), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Get image from upload or use profile image
+      let imageBuffer: Buffer;
+      if (req.file?.buffer) {
+        imageBuffer = req.file.buffer;
+      } else if (user.profileImageUrl) {
+        // Load existing profile image
+        const imagePath = path.join(process.cwd(), 'temp_profiles', path.basename(user.profileImageUrl));
+        if (fs.existsSync(imagePath)) {
+          imageBuffer = fs.readFileSync(imagePath);
+        } else {
+          return res.status(400).json({ message: 'No image available. Please upload an image.' });
+        }
+      } else {
+        return res.status(400).json({ message: 'No image provided' });
+      }
+
+      const userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Rapper';
+      const bio = user.bio || 'A skilled rapper ready to battle';
+      const rapStyle = user.rapStyle || 'default';
+
+      // Generate character card
+      const result = await characterCardGenerator.generateCharacterCard(
+        userId,
+        userName,
+        imageBuffer,
+        bio,
+        rapStyle,
+        {
+          totalBattles: user.totalBattles || 0,
+          totalWins: user.totalWins || 0,
+        }
+      );
+
+      // Update user with character card data
+      await storage.updateUser(userId, {
+        characterCardUrl: result.cardUrl,
+        characterCardData: result.cardData,
+      });
+
+      res.json(result);
+    } catch (error) {
+      console.error('Error generating character card:', error);
+      res.status(500).json({ message: 'Failed to generate character card' });
+    }
+  });
+
+  // Serve character card images
+  app.get('/api/character-cards/:filename', (req, res) => {
+    try {
+      const filename = req.params.filename;
+      const filePath = path.join(process.cwd(), 'temp_cards', filename);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ message: 'Character card not found' });
+      }
+
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+    } catch (error) {
+      console.error('Error serving character card:', error);
+      res.status(500).json({ message: 'Failed to serve character card' });
+    }
+  });
+
+  // Serve profile images
+  app.get('/api/profile-images/:filename', (req, res) => {
+    try {
+      const filename = req.params.filename;
+      const filePath = path.join(process.cwd(), 'temp_profiles', filename);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ message: 'Profile image not found' });
+      }
+
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+    } catch (error) {
+      console.error('Error serving profile image:', error);
+      res.status(500).json({ message: 'Failed to serve profile image' });
     }
   });
 

@@ -1661,6 +1661,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Name and training_data are required' });
       }
 
+      // SECURITY: Validate name format (prevent injection)
+      if (typeof name !== 'string' || name.length > 100 || !/^[a-zA-Z0-9\s_-]+$/.test(name)) {
+        return res.status(400).json({ message: 'Invalid model name format' });
+      }
+
+      // SECURITY: Validate training data is array and not too large
+      if (!Array.isArray(training_data) || training_data.length > 10000) {
+        return res.status(400).json({ message: 'Training data must be an array with max 10000 items' });
+      }
+
       console.log(`📚 Creating fine-tuning job: ${name}`);
 
       // Upload training data file
@@ -1688,6 +1698,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/fine-tunings/:id', isAuthenticated, async (req: any, res) => {
     try {
       const { id } = req.params;
+      
+      // SECURITY: Validate ID format before passing to service
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+        return res.status(400).json({ message: 'Invalid fine-tuning job ID format' });
+      }
+
       const fineTuning = await fineTuningService.getFineTuning(id);
       res.json(fineTuning);
     } catch (error) {

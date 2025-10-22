@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Bot } from "lucide-react";
 import { Link } from "wouter";
 import { SocialShare } from "@/components/SocialShare";
+import { SEO, generateWebPageStructuredData } from "@/components/SEO";
 
 interface SubscriptionStatus {
   tier: 'free' | 'premium' | 'pro';
@@ -32,6 +33,15 @@ interface Battle {
 
 export default function Home() {
   const { user } = useAuth();
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [volume, setVolume] = useState(0.6);
+
+  const structuredData = generateWebPageStructuredData(
+    "Home - Battle Rap AI Dashboard",
+    "Your personal rap battle dashboard. Start battles, view stats, manage your clone, and access tournaments.",
+    "https://rapbots.online/"
+  );
   
   const { data: subscriptionStatus } = useQuery<SubscriptionStatus>({
     queryKey: ["/api/subscription/status"],
@@ -66,6 +76,22 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
+      <SEO
+        title="Dashboard - Battle Rap AI"
+        description="Your personal rap battle dashboard. Start battles, view stats, manage your clone, and compete in tournaments."
+        keywords={['rap dashboard', 'battle stats', 'AI rap game', 'battle history', 'rap tournaments']}
+        structuredData={structuredData}
+      />
+      {/* Hidden audio element */}
+      <audio
+        ref={audioRef}
+        src={themeSong}
+        preload="auto"
+        onPlay={() => setIsPlaying(true)}
+        onPause={() => setIsPlaying(false)}
+        onError={(e) => console.error('Theme song error:', e)}
+      />
+
       <div className="container mx-auto max-w-6xl">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">

@@ -2,16 +2,24 @@ User-agent: *
 Allow: /
 
 # Sitemap location
-Sitemap: https://your-domain.com/sitemap.xml
+Sitemap: https://rapbots.online/sitemap.xml
 
 # Disallow admin and private routes
 Disallow: /admin
 Disallow: /api/
 Disallow: /_*
 
-# Allow important public routes
+# Allow important public routes for crawling
 Allow: /
 Allow: /battle
+Allow: /clone
 Allow: /tournaments
+Allow: /tournaments/leaderboard
+Allow: /tournaments/history
+Allow: /tournaments/brackets
 Allow: /subscribe
 Allow: /settings
+Allow: /fine-tuning
+
+# Crawl delay - be nice to the servers
+Crawl-delay: 1

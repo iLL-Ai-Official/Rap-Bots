@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Bot, Zap, TrendingUp, Swords } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { SEO, generateWebPageStructuredData } from "@/components/SEO";
 
 interface UserClone {
   id: string;
@@ -25,7 +26,13 @@ interface UserClone {
 export default function CloneManager() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [, navigate] = useLocation();
+  const [, setLocation] = useLocation();
+
+  const structuredData = generateWebPageStructuredData(
+    "Clone Manager - Battle Your AI Clone",
+    "Create an AI clone of yourself that matches your rap battle skill level. Battle against your clone to practice and improve your skills.",
+    "https://rapbots.online/clone"
+  );
 
   // Fetch user's clone
   const { data: clone, isLoading, error } = useQuery<UserClone>({
@@ -64,7 +71,7 @@ export default function CloneManager() {
   const handleBattleClone = () => {
     if (clone) {
       // Navigate to battle arena with clone as opponent
-      navigate(`/?opponent=clone_${clone.id}`);
+      setLocation(`/?opponent=clone_${clone.id}`);
     }
   };
 
@@ -92,6 +99,12 @@ export default function CloneManager() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <SEO
+        title="Clone Manager - Battle Your AI Clone | Battle Rap AI"
+        description="Create and battle against an AI clone of yourself that matches your rap battle skill level. Improve your skills by battling your digital twin."
+        keywords={['AI clone', 'rap battle clone', 'battle yourself', 'practice rap battle', 'AI opponent', 'skill matching']}
+        structuredData={structuredData}
+      />
       <div className="mb-8">
         <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
           <Bot className="h-10 w-10" />

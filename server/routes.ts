@@ -11,7 +11,7 @@ import { barkTTS } from "./services/bark";
 import { scoringService } from "./services/scoring";
 import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
-import { characterCardGenerator } from "./services/characterCardGenerator";
+import { FineTuningService } from "./services/fine-tuning";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -1859,6 +1859,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error serving SFX file:', error);
       res.status(500).json({ error: 'Failed to serve SFX file' });
+    }
+  });
+
+  // Fine-Tuning and Training System endpoints
+  const fineTuningService = new FineTuningService();
+
+  app.get('/api/fine-tunings', isAuthenticated, async (req: any, res) => {
+    try {
+      // Check if fine-tuning is available
+      const accessStatus = await fineTuningService.checkFineTuningAccess();
+      
+      if (!accessStatus.available) {
+        return res.json({
+          available: false,
+          message: accessStatus.message,
+          models: []
+        });
+      }
+
+      // Get all fine-tuning jobs if available
+      const models = await fineTuningService.listFineTunings();
+      
+      res.json({
+        available: true,
+        message: accessStatus.message,
+        models: models
+      });
+    } catch (error) {
+      console.error('Error fetching fine-tunings:', error);
+      res.json({
+        available: false,
+        message: error instanceof Error ? error.message : 'Failed to fetch fine-tunings',
+        models: []
+      });
+    }
+  });
+
+  app.post('/api/fine-tunings', isAuthenticated, async (req: any, res) => {
+    try {
+      const { name, training_data } = req.body;
+
+      if (!name || !training_data) {
+        return res.status(400).json({ message: 'Name and training_data are required' });
+      }
+
+      // SECURITY: Validate name format (prevent injection)
+      if (typeof name !== 'string' || name.length > 100 || !/^[a-zA-Z0-9\s_-]+$/.test(name)) {
+        return res.status(400).json({ message: 'Invalid model name format' });
+      }
+
+      // SECURITY: Validate training data is array and not too large
+      if (!Array.isArray(training_data) || training_data.length > 10000) {
+        return res.status(400).json({ message: 'Training data must be an array with max 10000 items' });
+      }
+
+      console.log(`📚 Creating fine-tuning job: ${name}`);
+
+      // Upload training data file
+      const fileId = await fineTuningService.uploadTrainingFile(training_data);
+      console.log(`✅ Training file uploaded: ${fileId}`);
+
+      // Create fine-tuning job
+      const fineTuningJob = await fineTuningService.createFineTuning({
+        name,
+        input_file_id: fileId,
+        base_model: 'llama-3.1-8b-instant',
+        type: 'lora'
+      });
+
+      console.log(`✅ Fine-tuning job created: ${fineTuningJob.id}`);
+      res.json(fineTuningJob);
+    } catch (error) {
+      console.error('Error creating fine-tuning:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to create fine-tuning job' 
+      });
+    }
+  });
+
+  app.get('/api/fine-tunings/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      // SECURITY: Validate ID format before passing to service
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+        return res.status(400).json({ message: 'Invalid fine-tuning job ID format' });
+      }
+
+      const fineTuning = await fineTuningService.getFineTuning(id);
+      res.json(fineTuning);
+    } catch (error) {
+      console.error('Error fetching fine-tuning:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to fetch fine-tuning job' 
+      });
+    }
+  });
+
+  app.get('/api/training-data/sample', async (req, res) => {
+    try {
+      const sampleData = fineTuningService.generateSampleRapData();
+      const jsonlFormat = fineTuningService.exportTrainingDataAsJSONL(sampleData);
+      
+      res.json({
+        sample_data: sampleData,
+        jsonl_format: jsonlFormat,
+        instructions: 'Use this format for your training data. Each entry should include prompt, completion, difficulty, style, and optional rhyme_scheme.'
+      });
+    } catch (error) {
+      console.error('Error generating sample data:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to generate sample data' 
+      });
+    }
+  });
+
+  app.get('/api/training-data/full', async (req, res) => {
+    try {
+      const trainingDataPath = path.join(process.cwd(), 'battle_rap_training_data.json');
+      
+      if (!fs.existsSync(trainingDataPath)) {
+        return res.status(404).json({ message: 'Training data file not found' });
+      }
+
+      const trainingData = JSON.parse(fs.readFileSync(trainingDataPath, 'utf-8'));
+      res.json(trainingData);
+    } catch (error) {
+      console.error('Error fetching training data:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to fetch training data' 
+      });
     }
   });
 

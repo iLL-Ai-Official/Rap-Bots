@@ -10,6 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Brain, Upload, Download, CheckCircle, AlertCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { SEO, generateWebPageStructuredData } from "@/components/SEO";
 const fineTuningImage = "/images/AI_training_interface_dac1a3f8.png";
 
 interface FineTuningJob {
@@ -44,6 +45,12 @@ interface SampleDataResponse {
 export default function FineTuning() {
   const [newModelName, setNewModelName] = useState("");
   const [trainingDataText, setTrainingDataText] = useState("");
+
+  const structuredData = generateWebPageStructuredData(
+    "Fine-Tuning - Train Custom Rap AI Models",
+    "Create and manage custom rap AI models trained on your own data. Fine-tune AI to match your specific battle rap style.",
+    "https://rapbots.online/fine-tuning"
+  );
 
   // Fetch existing fine-tuned models
   const { data: fineTuningData, isLoading } = useQuery<FineTuningResponse>({
@@ -111,6 +118,12 @@ export default function FineTuning() {
 
   return (
     <div className="container mx-auto py-8 space-y-6 relative">
+      <SEO
+        title="Fine-Tuning - Train Custom Rap AI Models | Battle Rap AI"
+        description="Create and manage custom rap AI models trained on your own data. Fine-tune AI to match your specific battle rap style and preferences."
+        keywords={['AI fine-tuning', 'custom rap model', 'train AI', 'rap AI training', 'machine learning rap', 'AI customization']}
+        structuredData={structuredData}
+      />
       {/* Fine-tuning Background */}
       <div 
         className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-8 z-0 pointer-events-none"

@@ -20,6 +20,7 @@ import { SimpleAnalyzer } from "@/components/simple-analyzer";
 import { formatDuration } from "@/lib/audio-utils";
 import { preventMobileOverscroll, applyMobileScrollClasses } from "@/lib/mobile-scroll-prevention";
 import { motion, AnimatePresence } from "framer-motion";
+import { SEO, generateBattleArenaStructuredData } from "@/components/SEO";
 const battleArenaImage = "/images/Epic_rap_battle_arena_5a01b4d4.png";
 
 export default function BattleArena() {
@@ -34,6 +35,8 @@ export default function BattleArena() {
     voiceSpeed: 1.0,
     battleLength: 5
   });
+
+  const structuredData = generateBattleArenaStructuredData();
 
   // Mobile scroll prevention refs
   const mainRef = useRef<HTMLElement>(null);
@@ -510,6 +513,12 @@ export default function BattleArena() {
 
   return (
     <>
+      <SEO
+        title="Battle Arena - Epic AI Rap Battles | Battle Rap AI"
+        description="Face off against AI opponents in voice-powered rap battles with real-time scoring. Choose your opponent, select difficulty, and prove your skills."
+        keywords={['rap battle arena', 'voice rap game', 'AI battle', 'freestyle competition', 'real-time scoring', 'voice recognition']}
+        structuredData={structuredData}
+      />
       {/* Header */}
       <header ref={headerRef} className="bg-secondary-dark border-b border-battle-gray px-4 py-3 prevent-pull-to-refresh">
         <div className="max-w-7xl mx-auto flex items-center justify-between">

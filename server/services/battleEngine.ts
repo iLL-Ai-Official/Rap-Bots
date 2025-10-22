@@ -6,7 +6,7 @@ import { PerformanceOptimizer } from './performanceOptimizer';
 import { userTTSManager } from './user-tts-manager';
 
 export interface BattleContext {
-  difficulty: 'easy' | 'normal' | 'hard';
+  difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' | 'god';
   profanityFilter: boolean;
   character: {
     id: string;

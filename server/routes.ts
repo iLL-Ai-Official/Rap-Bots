@@ -805,7 +805,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.body;
 
       // SECURITY: Validate battle parameters
-      const validDifficulties = ['easy', 'normal', 'hard', 'nightmare'];
+      const validDifficulties = ['easy', 'normal', 'hard', 'nightmare', 'god'];
       if (difficulty && !validDifficulties.includes(difficulty)) {
         return res.status(400).json({ message: "Invalid difficulty level" });
       }
@@ -1063,7 +1063,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isPlayingAudio: false,
         userScore: battle.userScore,
         aiScore: battle.aiScore,
-        difficulty: battle.difficulty as "easy" | "normal" | "hard",
+        difficulty: battle.difficulty as "easy" | "normal" | "hard" | "nightmare" | "god",
         profanityFilter: battle.profanityFilter,
         timeRemaining: 30,
       };

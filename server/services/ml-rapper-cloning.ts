@@ -87,18 +87,18 @@ export class MLRapperCloningService {
 
     try {
       // Use Groq LLaMA for fast inference with style transfer
-      const response = await this.groqService.generateVerse({
-        characterId: rapperProfile.name,
-        difficulty: this.mapStyleToDifficulty(rapperProfile.style),
-        opponent: opponentName,
-        previousLines: [],
-        battleContext: {
-          round: 1,
-          userScore: 0,
-          opponentScore: 0
-        },
-        customPrompt: stylePrompt
-      });
+      // Note: We use generateRapResponse which is the main verse generation method
+      const userVerse = prompt || `I'm challenging you in ${bars} bars about ${theme || 'skills'}`;
+      
+      const response = await this.groqService.generateRapResponse(
+        userVerse,
+        this.mapStyleToDifficulty(rapperProfile.style),
+        false, // profanityFilter
+        rapperProfile.characteristics.rhymeComplexity * 100, // lyricComplexity
+        rapperProfile.characteristics.flowVariation * 100, // styleIntensity
+        50, // userScore
+        true // enableInternalRhymes
+      );
 
       return response;
     } catch (error) {
@@ -115,7 +115,7 @@ export class MLRapperCloningService {
     const msPerBar = (60000 / beatContext.bpm) * 4; // 4 beats per bar at given BPM
 
     // Analyze syllable structure
-    const analysis = await this.lyricAnalysis.analyzeVerse(lyrics, 'user');
+    const analysis = await this.lyricAnalysis.analyzeVerse(lyrics);
     
     const allSyllables: string[] = [];
     const syllableStress: number[] = [];
@@ -311,7 +311,7 @@ export class MLRapperCloningService {
     let totalMetaphors = 0;
     
     for (const battle of battlesData) {
-      const analysis = await this.lyricAnalysis.analyzeVerse(battle.userVerse, userId);
+      const analysis = await this.lyricAnalysis.analyzeVerse(battle.userVerse);
       
       totalSyllables += analysis.flowAnalysis.averageSyllables * analysis.lines.length;
       totalBars += analysis.lines.length / 2;

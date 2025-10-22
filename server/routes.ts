@@ -1742,7 +1742,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Generate lyrics in a specific rapper's style
   app.post('/api/ml/style-transfer', isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const { rapperName, style, bars, theme, opponentName, prompt } = req.body;
+
+      // Rate limiting: Check if user can make ML requests
+      const canBattle = await storage.canUserStartBattle(userId);
+      if (!canBattle) {
+        return res.status(403).json({ 
+          message: "ML request limit reached. Upgrade to Premium or Pro for more features!",
+          upgrade: true 
+        });
+      }
 
       // Validate inputs
       if (!rapperName || !style) {
@@ -1800,7 +1810,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Analyze beat and align lyrics for flow modeling
   app.post('/api/ml/beat-alignment', isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const { lyrics, bpm, timeSignature, genre } = req.body;
+
+      // Rate limiting: Check if user can make ML requests
+      const canBattle = await storage.canUserStartBattle(userId);
+      if (!canBattle) {
+        return res.status(403).json({ 
+          message: "ML request limit reached. Upgrade to Premium or Pro for more features!",
+          upgrade: true 
+        });
+      }
 
       if (!lyrics || !bpm) {
         return res.status(400).json({ message: 'Lyrics and BPM are required' });
@@ -1839,6 +1859,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/ml/create-profile', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+
+      // Rate limiting: Profile creation is less expensive, but still limit it
+      const canBattle = await storage.canUserStartBattle(userId);
+      if (!canBattle) {
+        return res.status(403).json({ 
+          message: "ML request limit reached. Upgrade to Premium or Pro for more features!",
+          upgrade: true 
+        });
+      }
 
       console.log(`📊 Creating rapper profile from battle history for user ${userId}...`);
       

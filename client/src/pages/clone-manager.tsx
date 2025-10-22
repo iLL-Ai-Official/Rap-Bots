@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Bot, Zap, TrendingUp, Swords } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 
 interface UserClone {
   id: string;
@@ -25,7 +25,7 @@ interface UserClone {
 export default function CloneManager() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [, navigate] = useNavigate();
+  const [, navigate] = useLocation();
 
   // Fetch user's clone
   const { data: clone, isLoading, error } = useQuery<UserClone>({

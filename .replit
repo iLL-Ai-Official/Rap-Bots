@@ -54,6 +54,7 @@ args = "NODE_OPTIONS=\"--max-old-space-size=4096\" npm run dev"
 
 [agent]
 integrations = ["javascript_log_in_with_replit:1.0.0"]
+expertMode = true
 
 [[ports]]
 localPort = 5000
@@ -62,7 +63,3 @@ externalPort = 80
 [[ports]]
 localPort = 36301
 externalPort = 3000
-
-[[ports]]
-localPort = 45323
-externalPort = 3001

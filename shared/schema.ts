@@ -82,7 +82,7 @@ export interface BattleState {
   isPlayingAudio: boolean;
   userScore: number;
   aiScore: number;
-  difficulty: "easy" | "normal" | "hard";
+  difficulty: "easy" | "normal" | "hard" | "nightmare" | "god";
   profanityFilter: boolean;
   timeRemaining: number;
 }

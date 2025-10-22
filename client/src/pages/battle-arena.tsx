@@ -23,7 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 const battleArenaImage = "/images/Epic_rap_battle_arena_5a01b4d4.png";
 
 export default function BattleArena() {
-  const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard">("normal");
+  const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard" | "nightmare" | "god">("normal");
   const [profanityFilter, setProfanityFilter] = useState(false);
   const [lyricComplexity, setLyricComplexity] = useState(75);
   const [styleIntensity, setStyleIntensity] = useState(85);
@@ -468,9 +468,9 @@ export default function BattleArena() {
   };
 
   const handleDifficultyChange = (value: string) => {
-    setDifficulty(value as "easy" | "normal" | "hard");
+    setDifficulty(value as "easy" | "normal" | "hard" | "nightmare" | "god");
     if (currentBattleId) {
-      updateBattleState({ difficulty: value as "easy" | "normal" | "hard" });
+      updateBattleState({ difficulty: value as "easy" | "normal" | "hard" | "nightmare" | "god" });
     }
   };
 
@@ -632,6 +632,8 @@ export default function BattleArena() {
                       <SelectItem value="easy">Easy</SelectItem>
                       <SelectItem value="normal">Normal</SelectItem>
                       <SelectItem value="hard">Hard</SelectItem>
+                      <SelectItem value="nightmare">Nightmare</SelectItem>
+                      <SelectItem value="god">God Mode ✨</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

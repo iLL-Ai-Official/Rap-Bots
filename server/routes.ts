@@ -1145,6 +1145,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userPerformanceScore = scoringService.calculateUserScore(userText);
       console.log(`🎯 User performance: ${userPerformanceScore}/100 - AI will react accordingly`);
 
+      // Check if this is a clone battle and adjust difficulty/complexity accordingly
+      const isCloneBattle = battle.aiCharacterId?.startsWith('clone_');
+      let adjustedDifficulty = battle.difficulty;
+      let adjustedComplexity = battle.lyricComplexity || 50;
+      let adjustedIntensity = battle.styleIntensity || 50;
+
+      if (isCloneBattle) {
+        console.log(`🤖 Clone battle detected - adjusting AI to match user's skill level`);
+        const cloneId = battle.aiCharacterId.replace('clone_', '');
+        const clone = await storage.getCloneById(cloneId);
+        
+        if (clone) {
+          // Adjust AI difficulty based on clone's skill level
+          adjustedComplexity = clone.avgRhymeDensity;
+          adjustedIntensity = clone.skillLevel;
+          
+          // Map skill level to difficulty
+          if (clone.skillLevel < 40) adjustedDifficulty = 'easy';
+          else if (clone.skillLevel >= 40 && clone.skillLevel < 65) adjustedDifficulty = 'normal';
+          else if (clone.skillLevel >= 65 && clone.skillLevel < 85) adjustedDifficulty = 'hard';
+          else adjustedDifficulty = 'nightmare';
+          
+          console.log(`🎯 Clone AI settings: difficulty=${adjustedDifficulty}, complexity=${adjustedComplexity}, intensity=${adjustedIntensity}`);
+        }
+      }
+
       // NOW generate AI response with user score context for reactive behavior
       console.log(`🤖 Generating AI response for: "${userText.substring(0, 30)}..."`);
 
@@ -1154,10 +1180,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         aiResponseText = await Promise.race([
           groqService.generateRapResponse(
             userText, // Use actual transcription for better AI response
-            battle.difficulty, 
+            adjustedDifficulty, 
             battle.profanityFilter,
-            battle.lyricComplexity || 50,
-            battle.styleIntensity || 50,
+            adjustedComplexity,
+            adjustedIntensity,
             userPerformanceScore // Pass user score for reactive AI
           ),
           new Promise<string>((_, reject) => 

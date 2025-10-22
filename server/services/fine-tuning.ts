@@ -143,6 +143,24 @@ export class FineTuningService {
     return result.data;
   }
 
+  // Delete a fine-tuning job
+  async deleteFineTuning(id: string): Promise<{ id: string; object: string; deleted: boolean }> {
+    const response = await fetch(`${this.baseUrl}/fine_tunings/${id}`, {
+      method: "DELETE",
+      headers: {
+        "Authorization": `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to delete fine-tuning: ${response.statusText}`);
+    }
+
+    const result = await response.json();
+    return result;
+  }
+
   // Upload training data file (requires file upload endpoint)
   async uploadTrainingFile(trainingData: RapTrainingData[]): Promise<string> {
     // Convert training data to JSONL format for fine-tuning

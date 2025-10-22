@@ -1000,6 +1000,201 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fine-tuning API routes
+  // Check fine-tuning access availability
+  app.get('/api/fine-tuning/access', isAuthenticated, async (req: any, res) => {
+    try {
+      const fineTuningService = new FineTuningService();
+      const access = await fineTuningService.checkFineTuningAccess();
+      res.json(access);
+    } catch (error) {
+      console.error("Error checking fine-tuning access:", error);
+      res.status(500).json({ message: "Failed to check fine-tuning access" });
+    }
+  });
+
+  // List all fine-tuning jobs
+  app.get('/api/fine-tuning', isAuthenticated, async (req: any, res) => {
+    try {
+      const fineTuningService = new FineTuningService();
+      const fineTunings = await fineTuningService.listFineTunings();
+      res.json({ object: "list", data: fineTunings });
+    } catch (error: any) {
+      console.error("Error listing fine-tunings:", error);
+      res.status(500).json({ 
+        message: "Failed to list fine-tunings",
+        error: error.message 
+      });
+    }
+  });
+
+  // Create a new fine-tuning job
+  app.post('/api/fine-tuning', isAuthenticated, async (req: any, res) => {
+    try {
+      const { name, input_file_id, base_model, type } = req.body;
+
+      // Validate required fields
+      if (!name || !input_file_id) {
+        return res.status(400).json({ 
+          message: "Missing required fields: name and input_file_id are required" 
+        });
+      }
+
+      const fineTuningService = new FineTuningService();
+      const fineTuning = await fineTuningService.createFineTuning({
+        name,
+        input_file_id,
+        base_model,
+        type
+      });
+
+      res.json({ 
+        id: fineTuning.id,
+        object: "fine_tuning",
+        data: fineTuning 
+      });
+    } catch (error: any) {
+      console.error("Error creating fine-tuning:", error);
+      res.status(500).json({ 
+        message: "Failed to create fine-tuning",
+        error: error.message 
+      });
+    }
+  });
+
+  // Get a specific fine-tuning job by ID
+  app.get('/api/fine-tuning/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({ message: "Fine-tuning ID is required" });
+      }
+
+      const fineTuningService = new FineTuningService();
+      const fineTuning = await fineTuningService.getFineTuning(id);
+
+      res.json({ 
+        id: fineTuning.id,
+        object: "fine_tuning",
+        data: fineTuning 
+      });
+    } catch (error: any) {
+      console.error("Error getting fine-tuning:", error);
+      
+      if (error.message.includes("404") || error.message.includes("not found")) {
+        return res.status(404).json({ 
+          message: "Fine-tuning not found",
+          error: error.message 
+        });
+      }
+      
+      res.status(500).json({ 
+        message: "Failed to get fine-tuning",
+        error: error.message 
+      });
+    }
+  });
+
+  // Delete a fine-tuning job by ID
+  app.delete('/api/fine-tuning/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({ message: "Fine-tuning ID is required" });
+      }
+
+      const fineTuningService = new FineTuningService();
+      const result = await fineTuningService.deleteFineTuning(id);
+
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error deleting fine-tuning:", error);
+      
+      if (error.message.includes("404") || error.message.includes("not found")) {
+        return res.status(404).json({ 
+          message: "Fine-tuning not found",
+          error: error.message 
+        });
+      }
+      
+      res.status(500).json({ 
+        message: "Failed to delete fine-tuning",
+        error: error.message 
+      });
+    }
+  });
+
+  // Upload training data file for fine-tuning
+  app.post('/api/fine-tuning/upload', isAuthenticated, async (req: any, res) => {
+    try {
+      const { trainingData } = req.body;
+
+      if (!trainingData || !Array.isArray(trainingData)) {
+        return res.status(400).json({ 
+          message: "Training data is required and must be an array" 
+        });
+      }
+
+      const fineTuningService = new FineTuningService();
+      const fileId = await fineTuningService.uploadTrainingFile(trainingData);
+
+      res.json({ 
+        success: true,
+        file_id: fileId,
+        message: "Training data uploaded successfully" 
+      });
+    } catch (error: any) {
+      console.error("Error uploading training data:", error);
+      res.status(500).json({ 
+        message: "Failed to upload training data",
+        error: error.message 
+      });
+    }
+  });
+
+  // Get sample training data
+  app.get('/api/fine-tuning/sample-data', isAuthenticated, async (req: any, res) => {
+    try {
+      const fineTuningService = new FineTuningService();
+      const sampleData = fineTuningService.generateSampleRapData();
+      res.json({ data: sampleData });
+    } catch (error: any) {
+      console.error("Error generating sample data:", error);
+      res.status(500).json({ 
+        message: "Failed to generate sample data",
+        error: error.message 
+      });
+    }
+  });
+
+  // Export training data as JSONL
+  app.post('/api/fine-tuning/export-jsonl', isAuthenticated, async (req: any, res) => {
+    try {
+      const { trainingData } = req.body;
+
+      if (!trainingData || !Array.isArray(trainingData)) {
+        return res.status(400).json({ 
+          message: "Training data is required and must be an array" 
+        });
+      }
+
+      const fineTuningService = new FineTuningService();
+      const jsonl = fineTuningService.exportTrainingDataAsJSONL(trainingData);
+
+      res.setHeader('Content-Type', 'application/jsonl');
+      res.setHeader('Content-Disposition', 'attachment; filename="rap_training_data.jsonl"');
+      res.send(jsonl);
+    } catch (error: any) {
+      console.error("Error exporting training data:", error);
+      res.status(500).json({ 
+        message: "Failed to export training data",
+        error: error.message 
+      });
+    }
+  });
+
   // LIGHTNING-FAST TRANSCRIPTION ENDPOINT - Process audio in <200ms
   app.post("/api/battles/:id/transcribe", isAuthenticated, upload.single('audio'), async (req: any, res) => {
     const startTime = Date.now();

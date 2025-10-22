@@ -9,6 +9,7 @@ import { Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import themeSong from "@assets/Lyrical sauce, you can't handle the boss_1756951536849.mp3";
 import { SocialShare } from "@/components/SocialShare";
+import { SEO, generateWebPageStructuredData } from "@/components/SEO";
 
 interface SubscriptionStatus {
   tier: 'free' | 'premium' | 'pro';
@@ -37,6 +38,12 @@ export default function Home() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.6);
+
+  const structuredData = generateWebPageStructuredData(
+    "Home - Battle Rap AI Dashboard",
+    "Your personal rap battle dashboard. Start battles, view stats, manage your clone, and access tournaments.",
+    "https://rapbots.online/"
+  );
   
   const { data: subscriptionStatus } = useQuery<SubscriptionStatus>({
     queryKey: ["/api/subscription/status"],
@@ -117,6 +124,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
+      <SEO
+        title="Dashboard - Battle Rap AI"
+        description="Your personal rap battle dashboard. Start battles, view stats, manage your clone, and compete in tournaments."
+        keywords={['rap dashboard', 'battle stats', 'AI rap game', 'battle history', 'rap tournaments']}
+        structuredData={structuredData}
+      />
       {/* Hidden audio element */}
       <audio
         ref={audioRef}

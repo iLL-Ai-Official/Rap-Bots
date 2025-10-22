@@ -1,17 +1,13 @@
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Volume2, VolumeX, Bot } from "lucide-react";
+import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Bot } from "lucide-react";
 import { Link } from "wouter";
-import { useState, useEffect, useRef } from "react";
-import themeSong from "@assets/Lyrical sauce, you can't handle the boss_1756951536849.mp3";
 import { SocialShare } from "@/components/SocialShare";
-import { RewardedVideoAd } from "@/components/rewarded-video-ad";
-import { AdBanner } from "@/components/ad-banner";
-import { useToast } from "@/hooks/use-toast";
+import { SEO, generateWebPageStructuredData } from "@/components/SEO";
 
 interface SubscriptionStatus {
   tier: 'free' | 'premium' | 'pro';
@@ -40,8 +36,12 @@ export default function Home() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolume] = useState(0.6);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+
+  const structuredData = generateWebPageStructuredData(
+    "Home - Battle Rap AI Dashboard",
+    "Your personal rap battle dashboard. Start battles, view stats, manage your clone, and access tournaments.",
+    "https://rapbots.online/"
+  );
   
   const { data: subscriptionStatus } = useQuery<SubscriptionStatus>({
     queryKey: ["/api/subscription/status"],
@@ -57,81 +57,6 @@ export default function Home() {
     queryKey: ["/api/battles/history"],
     enabled: !!user,
   });
-
-  // Theme song autoplay effect
-  useEffect(() => {
-    const audio = audioRef.current;
-    if (audio) {
-      audio.volume = volume;
-      audio.loop = true;
-      
-      // Try to autoplay after user interaction
-      const playTheme = async () => {
-        try {
-          await audio.play();
-          setIsPlaying(true);
-        } catch (error) {
-          console.log('Autoplay blocked, waiting for user interaction');
-        }
-      };
-
-      // Attempt autoplay with a small delay
-      setTimeout(playTheme, 1000);
-    }
-  }, [volume]);
-
-  const togglePlayPause = async () => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
-    try {
-      if (isPlaying) {
-        audio.pause();
-        setIsPlaying(false);
-      } else {
-        await audio.play();
-        setIsPlaying(true);
-      }
-    } catch (error) {
-      console.error('Error playing audio:', error);
-    }
-  };
-
-  const handleVolumeChange = (newVolume: number) => {
-    setVolume(newVolume);
-    if (audioRef.current) {
-      audioRef.current.volume = newVolume;
-    }
-  };
-
-  // Handle ad reward - add free battles
-  const handleAdReward = async () => {
-    try {
-      const response = await fetch('/api/rewards/watch-ad', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ 
-          rewardType: 'battle',
-          rewardAmount: 1 
-        }),
-      });
-
-      if (response.ok) {
-        // Refresh subscription status to show new battle count
-        queryClient.invalidateQueries({ queryKey: ["/api/subscription/status"] });
-      } else {
-        throw new Error('Failed to process reward');
-      }
-    } catch (error) {
-      console.error('Error processing ad reward:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add battle. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
 
   const getTierColor = (tier: string) => {
     switch (tier) {
@@ -151,6 +76,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
+      <SEO
+        title="Dashboard - Battle Rap AI"
+        description="Your personal rap battle dashboard. Start battles, view stats, manage your clone, and compete in tournaments."
+        keywords={['rap dashboard', 'battle stats', 'AI rap game', 'battle history', 'rap tournaments']}
+        structuredData={structuredData}
+      />
       {/* Hidden audio element */}
       <audio
         ref={audioRef}
@@ -184,30 +115,6 @@ export default function Home() {
           </div>
           
           <div className="flex items-center gap-4">
-            {/* Theme Song Controls */}
-            <div className="flex items-center gap-2 bg-slate-800 rounded-lg px-4 py-2 border border-slate-600">
-              <Button
-                onClick={togglePlayPause}
-                size="sm"
-                variant="ghost"
-                className="text-purple-400 hover:text-purple-300 hover:bg-purple-900/20 p-1"
-                data-testid="button-theme-toggle"
-              >
-                {isPlaying ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
-              </Button>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.1"
-                value={volume}
-                onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-                className="theme-volume-slider w-16 h-1 rounded-lg appearance-none"
-                data-testid="slider-volume"
-              />
-              <span className="text-xs text-slate-400 min-w-0 whitespace-nowrap">Theme</span>
-            </div>
-
             <Button 
               onClick={() => window.location.href = '/api/logout'}
               variant="outline"
@@ -301,11 +208,6 @@ export default function Home() {
                     No Battles Left
                   </Button>
                   <div className="mt-3 space-y-2">
-                    {subscriptionStatus?.tier === 'free' && (
-                      <p className="text-xs text-purple-200 text-center">
-                        💡 Watch an ad to earn a free battle!
-                      </p>
-                    )}
                     <Link href="/subscribe?tier=premium">
                       <Button variant="outline" className="w-full border-purple-400 text-purple-400 hover:bg-purple-400 hover:text-white text-sm">
                         Upgrade to Premium - $9.99/mo
@@ -374,28 +276,6 @@ export default function Home() {
             </CardContent>
           </Card>
         </div>
-
-        {/* Monetization Section for Free Users */}
-        {subscriptionStatus?.tier === 'free' && (
-          <div className="grid md:grid-cols-2 gap-6 mb-8">
-            {/* Rewarded Video Ad */}
-            {!subscriptionStatus?.canStartBattle && (
-              <RewardedVideoAd
-                onRewardEarned={handleAdReward}
-                rewardType="battle"
-                rewardAmount={1}
-              />
-            )}
-            
-            {/* Banner Ad Space */}
-            <AdBanner 
-              slot="home-banner-1"
-              format="auto"
-              responsive={true}
-              className="min-h-[250px]"
-            />
-          </div>
-        )}
 
         {/* Recent Battles */}
         <Card className="bg-slate-800 border-slate-700 text-white">

@@ -11,6 +11,7 @@ import { barkTTS } from "./services/bark";
 import { scoringService } from "./services/scoring";
 import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
+import { FineTuningService } from "./services/fine-tuning";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -26,10 +27,14 @@ const upload = multer({
   },
 });
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+// Initialize Stripe only if the secret key is provided
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
+
+if (!stripe) {
+  console.warn('⚠️ Stripe not configured - payment features will be disabled');
 }
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Service Worker endpoint for PWA functionality
@@ -159,6 +164,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clientSecret: `cashapp_battles_cs_${Date.now()}_${userId}`,
           amount: packageInfo.price,
           description: packageInfo.description
+        });
+      }
+
+      // Check if Stripe is configured for card payments
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment processing is currently unavailable. Please contact support.' 
         });
       }
 
@@ -363,6 +375,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // One-time payment intent (like ThcaStore's approach)
   app.post("/api/create-payment-intent", isAuthenticated, async (req: any, res) => {
     try {
+      // Check if Stripe is configured
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment processing is currently unavailable. Please contact support.' 
+        });
+      }
+
       const { amount, description = "Battle pack purchase" } = req.body;
       const userId = req.user.claims.sub;
 
@@ -402,6 +421,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({
           subscriptionId: `cashapp_${tier}_${Date.now()}`,
           clientSecret: `cashapp_cs_${Date.now()}_${userId}`,
+        });
+      }
+
+      // Check if Stripe is configured for card payments
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment processing is currently unavailable. Please contact support.' 
         });
       }
 
@@ -541,6 +567,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Stripe webhook for payment updates (subscriptions + one-time purchases)
   app.post('/api/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => {
+    // Check if Stripe is configured
+    if (!stripe) {
+      console.warn('⚠️ Stripe webhook called but Stripe is not configured');
+      return res.status(503).json({ 
+        message: 'Payment processing is currently unavailable.' 
+      });
+    }
+
     let event;
 
     try {
@@ -718,73 +752,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Ad impression analytics tracking
-  app.post('/api/analytics/ad-impression', isAuthenticated, async (req: any, res) => {
+  // Random match battle endpoint
+  app.post("/api/battles/random-match", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { adType, battleId, revenue, clicked } = req.body;
+      const { difficulty, preferredCharacters } = req.body;
 
-      // Log ad impression for analytics
-      console.log(`📊 Ad Impression: ${adType}`, {
+      console.log(`🎮 Random match requested by user ${userId}`);
+
+      // Check if user can start a battle
+      const canBattle = await storage.canUserStartBattle(userId);
+      if (!canBattle) {
+        return res.status(403).json({ 
+          message: "Battle limit reached. Upgrade to Premium or Pro for more battles!",
+          upgrade: true 
+        });
+      }
+
+      // Find random match
+      const match = await matchmakingService.findRandomMatch({
         userId,
-        battleId,
-        revenue: revenue || 0,
-        clicked: clicked || false,
-        timestamp: new Date().toISOString()
+        difficulty,
+        preferredCharacters,
       });
 
-      // In production, store this in analytics database
-      // For now, just acknowledge receipt
-      res.json({ success: true, message: 'Ad impression tracked' });
-    } catch (error) {
-      console.error("Error tracking ad impression:", error);
-      res.status(500).json({ message: "Failed to track ad impression" });
-    }
-  });
+      // Create battle with random opponent
+      const battleData = {
+        userId,
+        difficulty: match.difficulty,
+        profanityFilter: false,
+        lyricComplexity: match.lyricComplexity,
+        styleIntensity: match.styleIntensity,
+        voiceSpeed: 1.0,
+        aiCharacterName: match.opponentName,
+        aiCharacterId: match.opponentCharacterId,
+        userScore: 0,
+        aiScore: 0,
+        rounds: [],
+        status: "active"
+      };
 
-  // Reward user for watching ad
-  app.post('/api/rewards/watch-ad', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const { rewardType, rewardAmount } = req.body;
-
-      if (rewardType === 'battle' || rewardType === 'battles') {
-        // Award free battle(s) for watching ad
-        const battles = rewardType === 'battle' ? 1 : rewardAmount;
-        await storage.addUserBattles(userId, battles);
-        
-        console.log(`🎁 Rewarded user ${userId} with ${battles} battle(s) for watching ad`);
-        
-        res.json({ 
-          success: true, 
-          battlesAdded: battles,
-          message: `Added ${battles} battle(s) to your account!` 
-        });
-      } else if (rewardType === 'credits') {
-        // Award store credit for watching ad
-        const user = await storage.getUser(userId);
-        if (!user) {
-          return res.status(404).json({ message: 'User not found' });
+      const battle = await storage.createBattle(battleData);
+      
+      console.log(`✅ Random match created: ${match.opponentName} vs User`);
+      
+      res.status(201).json({
+        battle,
+        match: {
+          opponentName: match.opponentName,
+          opponentId: match.opponentCharacterId,
+          difficulty: match.difficulty,
         }
-        
-        const currentCredit = parseFloat(user.storeCredit || '0');
-        const newCredit = (currentCredit + rewardAmount).toFixed(2);
-        await storage.updateUser(userId, { storeCredit: newCredit });
-        
-        console.log(`🎁 Rewarded user ${userId} with $${rewardAmount} credit for watching ad`);
-        
-        res.json({ 
-          success: true, 
-          creditAdded: rewardAmount,
-          newBalance: newCredit,
-          message: `Added $${rewardAmount} to your account!` 
-        });
-      } else {
-        res.status(400).json({ message: 'Invalid reward type' });
-      }
-    } catch (error) {
-      console.error("Error processing ad reward:", error);
-      res.status(500).json({ message: "Failed to process ad reward" });
+      });
+    } catch (error: any) {
+      console.error("Error creating random match battle:", error);
+      res.status(500).json({ message: "Failed to create random match battle" });
     }
   });
 
@@ -805,7 +827,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } = req.body;
 
       // SECURITY: Validate battle parameters
-      const validDifficulties = ['easy', 'normal', 'hard', 'nightmare', 'god'];
+      const validDifficulties = ['easy', 'normal', 'hard', 'nightmare'];
       if (difficulty && !validDifficulties.includes(difficulty)) {
         return res.status(400).json({ message: "Invalid difficulty level" });
       }
@@ -941,11 +963,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/user/api-keys', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { openaiApiKey, groqApiKey, preferredTtsService } = req.body;
+      const { openaiApiKey, groqApiKey, elevenlabsApiKey, myshellApiKey, preferredTtsService } = req.body;
 
       const user = await storage.updateUserAPIKeys(userId, {
         openaiApiKey,
         groqApiKey,
+        elevenlabsApiKey,
+        myshellApiKey,
         preferredTtsService
       });
 
@@ -964,11 +988,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { service } = req.body;
 
-      if (!service || !['openai', 'groq'].includes(service)) {
+      if (!service || !['openai', 'groq', 'elevenlabs', 'myshell'].includes(service)) {
         return res.status(400).json({ message: "Invalid service specified" });
       }
 
-      const isValid = await userTTSManager.testUserAPIKey(userId, service as 'openai' | 'groq');
+      const isValid = await userTTSManager.testUserAPIKey(userId, service as 'openai' | 'groq' | 'elevenlabs' | 'myshell');
       res.json({ valid: isValid });
     } catch (error) {
       console.error(`Error testing ${req.body.service} API key:`, error);
@@ -1063,7 +1087,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isPlayingAudio: false,
         userScore: battle.userScore,
         aiScore: battle.aiScore,
-        difficulty: battle.difficulty as "easy" | "normal" | "hard" | "nightmare" | "god",
+        difficulty: battle.difficulty as "easy" | "normal" | "hard",
         profanityFilter: battle.profanityFilter,
         timeRemaining: 30,
       };
@@ -1550,7 +1574,157 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Analyze lyrics endpoint for frontend
+  // ML-powered lyric analysis endpoint
+  app.post('/api/ml-analyze-lyrics', isAuthenticated, async (req: any, res) => {
+    try {
+      const { text } = req.body;
+
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ message: 'Text is required' });
+      }
+
+      console.log(`🧠 ML-powered analysis requested for: "${text.substring(0, 50)}..."`);
+
+      // Use Groq's ML-powered analysis
+      const analysis = await groqService.analyzeLyricsWithML(text);
+
+      res.json({
+        ...analysis,
+        mlPowered: true,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('ML lyric analysis error:', error);
+      res.status(500).json({ message: 'ML analysis failed' });
+    }
+  });
+
+  // ML battle prediction endpoint
+  app.post('/api/ml-predict-battle', isAuthenticated, async (req: any, res) => {
+    try {
+      const { userLyrics, aiLyrics } = req.body;
+
+      if (!userLyrics || !aiLyrics) {
+        return res.status(400).json({ message: 'Both user and AI lyrics required' });
+      }
+
+      console.log(`🔮 ML battle prediction requested`);
+
+      // Use Groq's ML-powered prediction
+      const prediction = await groqService.predictBattleOutcome(userLyrics, aiLyrics);
+
+      res.json({
+        ...prediction,
+        mlPowered: true,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('ML battle prediction error:', error);
+      res.status(500).json({ message: 'ML prediction failed' });
+    }
+  });
+
+  // ML rhyme generation endpoint
+  app.post('/api/ml-generate-rhymes', isAuthenticated, async (req: any, res) => {
+    try {
+      const { seedWord, count } = req.body;
+
+      if (!seedWord || typeof seedWord !== 'string') {
+        return res.status(400).json({ message: 'Seed word is required' });
+      }
+
+      console.log(`🎵 ML rhyme generation for: ${seedWord}`);
+
+      // Use Groq's ML-powered rhyme generation
+      const rhymes = await groqService.generateMLRhymes(seedWord, count || 5);
+
+      res.json({
+        seedWord,
+        rhymes,
+        mlPowered: true,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error: any) {
+      console.error('ML rhyme generation error:', error);
+      res.status(500).json({ message: 'ML rhyme generation failed' });
+    }
+  });
+
+  // Real-time analysis endpoint (fast, cached)
+  app.post('/api/realtime-analyze', isAuthenticated, async (req: any, res) => {
+    try {
+      const { text, includeML, isFinalScore, battleId } = req.body;
+
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ message: 'Text is required' });
+      }
+
+      console.log(`⚡ Real-time analysis requested for: "${text.substring(0, 50)}..."`);
+
+      const analysis = await realtimeAnalysisService.analyzeRealtime(text, {
+        includeML: includeML || false,
+        isFinalScore: isFinalScore || false,
+        battleId: battleId
+      });
+
+      res.json(analysis);
+
+    } catch (error: any) {
+      console.error('Real-time analysis error:', error);
+      res.status(500).json({ message: 'Real-time analysis failed' });
+    }
+  });
+
+  // Compare two verses endpoint
+  app.post('/api/compare-verses', isAuthenticated, async (req: any, res) => {
+    try {
+      const { verse1, verse2, includeML } = req.body;
+
+      if (!verse1 || !verse2) {
+        return res.status(400).json({ message: 'Both verses are required' });
+      }
+
+      console.log(`⚔️ Verse comparison requested`);
+
+      const comparison = await realtimeAnalysisService.compareVerses(
+        verse1, 
+        verse2, 
+        includeML || false
+      );
+
+      res.json(comparison);
+
+    } catch (error: any) {
+      console.error('Verse comparison error:', error);
+      res.status(500).json({ message: 'Verse comparison failed' });
+    }
+  });
+
+  // Batch analysis endpoint
+  app.post('/api/batch-analyze', isAuthenticated, async (req: any, res) => {
+    try {
+      const { verses } = req.body;
+
+      if (!Array.isArray(verses) || verses.length === 0) {
+        return res.status(400).json({ message: 'Verses array is required' });
+      }
+
+      console.log(`📦 Batch analysis for ${verses.length} verses`);
+
+      const results = await realtimeAnalysisService.batchAnalyze(verses);
+
+      res.json({ results, count: results.length });
+
+    } catch (error: any) {
+      console.error('Batch analysis error:', error);
+      res.status(500).json({ message: 'Batch analysis failed' });
+    }
+  });
+
+  // Analyze lyrics endpoint for frontend (legacy support)
   app.post('/api/analyze-lyrics', isAuthenticated, async (req: any, res) => {
     try {
       const { text } = req.body;
@@ -1559,26 +1733,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Text is required' });
       }
 
-      // Use the scoring service to analyze the lyrics
-      const dummyAiText = "Sample AI response for analysis";
-      const analysis = scoringService.scoreRound(text, dummyAiText);
+      // Use new real-time analysis service
+      const analysis = await realtimeAnalysisService.analyzeRealtime(text, {
+        includeML: false,
+        isFinalScore: false
+      });
 
+      // Format response for legacy compatibility
       const result = {
         rhymeDensity: analysis.rhymeDensity,
         flowQuality: analysis.flowQuality,
         creativity: analysis.creativity,
-        overallScore: analysis.userScore,
+        overallScore: analysis.score,
         breakdown: {
           vocabulary: Math.floor(analysis.creativity * 0.3),
           wordplay: Math.floor(analysis.creativity * 0.4),
           rhythm: Math.floor(analysis.flowQuality * 0.8),
           originality: Math.floor(analysis.creativity * 0.6)
         },
-        suggestions: [
-          analysis.userScore < 50 ? "Try adding more complex rhyme schemes" : "Great rhyme complexity!",
-          analysis.flowQuality < 60 ? "Work on syllable timing and rhythm" : "Excellent flow!",
-          analysis.creativity < 40 ? "Add more metaphors and wordplay" : "Creative wordplay detected!"
-        ]
+        suggestions: analysis.improvements,
+        feedback: analysis.feedback
       };
 
       res.json(result);
@@ -1688,6 +1862,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fine-Tuning and Training System endpoints
+  const fineTuningService = new FineTuningService();
+
+  app.get('/api/fine-tunings', isAuthenticated, async (req: any, res) => {
+    try {
+      // Check if fine-tuning is available
+      const accessStatus = await fineTuningService.checkFineTuningAccess();
+      
+      if (!accessStatus.available) {
+        return res.json({
+          available: false,
+          message: accessStatus.message,
+          models: []
+        });
+      }
+
+      // Get all fine-tuning jobs if available
+      const models = await fineTuningService.listFineTunings();
+      
+      res.json({
+        available: true,
+        message: accessStatus.message,
+        models: models
+      });
+    } catch (error) {
+      console.error('Error fetching fine-tunings:', error);
+      res.json({
+        available: false,
+        message: error instanceof Error ? error.message : 'Failed to fetch fine-tunings',
+        models: []
+      });
+    }
+  });
+
+  app.post('/api/fine-tunings', isAuthenticated, async (req: any, res) => {
+    try {
+      const { name, training_data } = req.body;
+
+      if (!name || !training_data) {
+        return res.status(400).json({ message: 'Name and training_data are required' });
+      }
+
+      // SECURITY: Validate name format (prevent injection)
+      if (typeof name !== 'string' || name.length > 100 || !/^[a-zA-Z0-9\s_-]+$/.test(name)) {
+        return res.status(400).json({ message: 'Invalid model name format' });
+      }
+
+      // SECURITY: Validate training data is array and not too large
+      if (!Array.isArray(training_data) || training_data.length > 10000) {
+        return res.status(400).json({ message: 'Training data must be an array with max 10000 items' });
+      }
+
+      console.log(`📚 Creating fine-tuning job: ${name}`);
+
+      // Upload training data file
+      const fileId = await fineTuningService.uploadTrainingFile(training_data);
+      console.log(`✅ Training file uploaded: ${fileId}`);
+
+      // Create fine-tuning job
+      const fineTuningJob = await fineTuningService.createFineTuning({
+        name,
+        input_file_id: fileId,
+        base_model: 'llama-3.1-8b-instant',
+        type: 'lora'
+      });
+
+      console.log(`✅ Fine-tuning job created: ${fineTuningJob.id}`);
+      res.json(fineTuningJob);
+    } catch (error) {
+      console.error('Error creating fine-tuning:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to create fine-tuning job' 
+      });
+    }
+  });
+
+  app.get('/api/fine-tunings/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id } = req.params;
+      
+      // SECURITY: Validate ID format before passing to service
+      if (!id || typeof id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+        return res.status(400).json({ message: 'Invalid fine-tuning job ID format' });
+      }
+
+      const fineTuning = await fineTuningService.getFineTuning(id);
+      res.json(fineTuning);
+    } catch (error) {
+      console.error('Error fetching fine-tuning:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to fetch fine-tuning job' 
+      });
+    }
+  });
+
+  app.get('/api/training-data/sample', async (req, res) => {
+    try {
+      const sampleData = fineTuningService.generateSampleRapData();
+      const jsonlFormat = fineTuningService.exportTrainingDataAsJSONL(sampleData);
+      
+      res.json({
+        sample_data: sampleData,
+        jsonl_format: jsonlFormat,
+        instructions: 'Use this format for your training data. Each entry should include prompt, completion, difficulty, style, and optional rhyme_scheme.'
+      });
+    } catch (error) {
+      console.error('Error generating sample data:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to generate sample data' 
+      });
+    }
+  });
+
+  app.get('/api/training-data/full', async (req, res) => {
+    try {
+      const trainingDataPath = path.join(process.cwd(), 'battle_rap_training_data.json');
+      
+      if (!fs.existsSync(trainingDataPath)) {
+        return res.status(404).json({ message: 'Training data file not found' });
+      }
+
+      const trainingData = JSON.parse(fs.readFileSync(trainingDataPath, 'utf-8'));
+      res.json(trainingData);
+    } catch (error) {
+      console.error('Error fetching training data:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to fetch training data' 
+      });
+    }
+  });
+
   // User Clone endpoints
   app.get('/api/user/clone', isAuthenticated, async (req: any, res) => {
     try {
@@ -1766,6 +2071,200 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error uploading SFX files:', error);
       res.status(500).json({ error: 'Failed to upload SFX files' });
+    }
+  });
+
+  // User profile routes
+  app.get('/api/profile/:userId', async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Return public profile data
+      const profile = {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl,
+        bio: user.bio,
+        rapStyle: user.rapStyle,
+        totalBattles: user.totalBattles,
+        totalWins: user.totalWins,
+        storeCredit: user.storeCredit,
+        characterCardUrl: user.characterCardUrl,
+        characterCardData: user.characterCardData,
+        createdAt: user.createdAt,
+      };
+
+      res.json(profile);
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      res.status(500).json({ message: 'Failed to fetch profile' });
+    }
+  });
+
+  app.put('/api/profile', isAuthenticated, upload.single('profileImage'), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { bio, rapStyle } = req.body;
+
+      // Update user profile
+      const updates: any = {};
+      if (bio !== undefined) updates.bio = bio;
+      if (rapStyle !== undefined) updates.rapStyle = rapStyle;
+      
+      await storage.updateUser(userId, updates);
+
+      // If profile image was uploaded, update profile image
+      if (req.file?.buffer) {
+        // Save profile image
+        const tempDir = path.join(process.cwd(), 'temp_profiles');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
+        }
+
+        const timestamp = Date.now();
+        const imagePath = path.join(tempDir, `profile_${userId}_${timestamp}.png`);
+        fs.writeFileSync(imagePath, req.file.buffer);
+
+        const profileImageUrl = `/api/profile-images/${userId}_${timestamp}.png`;
+        await storage.updateUser(userId, { profileImageUrl });
+      }
+
+      const updatedUser = await storage.getUser(userId);
+      res.json(updatedUser);
+    } catch (error) {
+      console.error('Error updating profile:', error);
+      res.status(500).json({ message: 'Failed to update profile' });
+    }
+  });
+
+  // Character card generation
+  app.post('/api/generate-character-card', isAuthenticated, upload.single('image'), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Check if this is first card generation (free) or regeneration (costs credits)
+      const isFirstCard = !user.characterCardUrl;
+      const CARD_GENERATION_COST = 0.50; // $0.50 per card generation after first
+
+      if (!isFirstCard) {
+        const currentCredit = parseFloat(user.storeCredit || '0');
+        if (currentCredit < CARD_GENERATION_COST) {
+          return res.status(402).json({ 
+            message: `Insufficient credits. Card generation costs $${CARD_GENERATION_COST.toFixed(2)}. Your balance: $${currentCredit.toFixed(2)}`,
+            required: CARD_GENERATION_COST,
+            balance: currentCredit,
+          });
+        }
+      }
+
+      // Get image from upload or use profile image
+      let imageBuffer: Buffer;
+      if (req.file?.buffer) {
+        imageBuffer = req.file.buffer;
+      } else if (user.profileImageUrl) {
+        // Load existing profile image
+        const imagePath = path.join(process.cwd(), 'temp_profiles', path.basename(user.profileImageUrl));
+        if (fs.existsSync(imagePath)) {
+          imageBuffer = fs.readFileSync(imagePath);
+        } else {
+          return res.status(400).json({ message: 'No image available. Please upload an image.' });
+        }
+      } else {
+        return res.status(400).json({ message: 'No image provided' });
+      }
+
+      const userName = `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Rapper';
+      const bio = user.bio || 'A skilled rapper ready to battle';
+      const rapStyle = user.rapStyle || 'default';
+
+      // Generate character card
+      const result = await characterCardGenerator.generateCharacterCard(
+        userId,
+        userName,
+        imageBuffer,
+        bio,
+        rapStyle,
+        {
+          totalBattles: user.totalBattles || 0,
+          totalWins: user.totalWins || 0,
+        }
+      );
+
+      // Deduct credits if not first card
+      if (!isFirstCard) {
+        const currentCredit = parseFloat(user.storeCredit || '0');
+        const newCredit = (currentCredit - CARD_GENERATION_COST).toFixed(2);
+        await storage.updateUser(userId, { storeCredit: newCredit });
+        console.log(`💳 Charged ${userId} $${CARD_GENERATION_COST} for card generation. New balance: $${newCredit}`);
+      } else {
+        console.log(`🎁 First card generation for ${userId} - FREE!`);
+      }
+
+      // Update user with character card data
+      await storage.updateUser(userId, {
+        characterCardUrl: result.cardUrl,
+        characterCardData: result.cardData,
+      });
+
+      res.json({
+        ...result,
+        cost: isFirstCard ? 0 : CARD_GENERATION_COST,
+        newBalance: isFirstCard ? parseFloat(user.storeCredit || '0') : parseFloat(user.storeCredit || '0') - CARD_GENERATION_COST,
+      });
+    } catch (error) {
+      console.error('Error generating character card:', error);
+      res.status(500).json({ message: 'Failed to generate character card' });
+    }
+  });
+
+  // Serve character card images
+  app.get('/api/character-cards/:filename', (req, res) => {
+    try {
+      const filename = req.params.filename;
+      const filePath = path.join(process.cwd(), 'temp_cards', filename);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ message: 'Character card not found' });
+      }
+
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+    } catch (error) {
+      console.error('Error serving character card:', error);
+      res.status(500).json({ message: 'Failed to serve character card' });
+    }
+  });
+
+  // Serve profile images
+  app.get('/api/profile-images/:filename', (req, res) => {
+    try {
+      const filename = req.params.filename;
+      const filePath = path.join(process.cwd(), 'temp_profiles', filename);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ message: 'Profile image not found' });
+      }
+
+      res.setHeader('Content-Type', 'image/png');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+    } catch (error) {
+      console.error('Error serving profile image:', error);
+      res.status(500).json({ message: 'Failed to serve profile image' });
     }
   });
 

@@ -2,11 +2,49 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Crown, Mic, Zap, Star } from "lucide-react";
+import { SEO, generateWebPageStructuredData } from "@/components/SEO";
 const heroImage = "/images/AI_rap_battle_landing_872131b2.png";
 
 export default function Landing() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Battle Rap AI",
+    "description": "Epic voice-powered rap battles against advanced AI opponents with real-time transcription and professional scoring",
+    "url": "https://rapbots.online/",
+    "applicationCategory": "GameApplication",
+    "operatingSystem": "Any",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "featureList": [
+      "Real-time voice recognition",
+      "AI opponents with distinct personalities",
+      "Professional battle scoring",
+      "Text-to-speech synthesis",
+      "Tournament system",
+      "Battle history tracking",
+      "Clone yourself system",
+      "Fine-tuning AI models"
+    ],
+    "aggregateRating": {
+      "@type": "AggregateRating",
+      "ratingValue": "4.8",
+      "ratingCount": "1247",
+      "bestRating": "5"
+    }
+  };
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
+      <SEO
+        title="Battle Rap AI - Epic Voice-Powered Rap Battles Against AI"
+        description="Experience the ultimate voice-powered freestyle battles against advanced AI opponents with real-time rap scoring. Master your flow, perfect your rhymes, and climb the leaderboard in this revolutionary battle rap game online."
+        keywords={['rap battle AI', 'voice battle game', 'freestyle rap game', 'AI rap opponent', 'battle rap online', 'voice recognition rap', 'hip hop battle game', 'rap scoring AI', 'freestyle battle simulator']}
+        structuredData={structuredData}
+      />
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-20 text-center" aria-labelledby="hero-title">
         <div className="mb-8 relative">

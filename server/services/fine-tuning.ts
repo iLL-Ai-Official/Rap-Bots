@@ -14,7 +14,7 @@ export interface FineTuningJob {
 export interface RapTrainingData {
   prompt: string;
   completion: string;
-  difficulty: "easy" | "normal" | "hard" | "nightmare" | "god";
+  difficulty: "easy" | "normal" | "hard";
   style: string;
   rhyme_scheme?: string;
 }
@@ -122,6 +122,11 @@ export class FineTuningService {
 
   // Get specific fine-tuning job
   async getFineTuning(id: string): Promise<FineTuningJob> {
+    // SECURITY: Validate ID format to prevent URL injection
+    if (!id || !/^[a-zA-Z0-9_-]+$/.test(id)) {
+      throw new Error('Invalid fine-tuning job ID format');
+    }
+
     const response = await fetch(`${this.baseUrl}/fine_tunings/${id}`, {
       method: "GET",
       headers: {

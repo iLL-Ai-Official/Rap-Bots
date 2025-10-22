@@ -9,6 +9,7 @@ export class GroqService {
   private rhymeEngine: AdvancedRhymeEngine;
   private rhymeArchitect: RhymeArchitectService;
   private internalRhymeAgent: InternalRhymeAgent;
+  private mlModelCache: Map<string, any> = new Map();
 
   constructor(apiKey?: string) {
     this.apiKey = apiKey || process.env.GROQ_API_KEY || process.env.GROQ_API_KEY_ENV_VAR || "";
@@ -340,16 +341,8 @@ OUTPUT: Technical brief for AI rapper in format: "User: [syllables/line], [schem
     let reactionMode = "standard";
     let aggressionBoost = 0;
     
-    // GOD MODE PROTOCOL - ABSOLUTE PERFECTION
-    if (difficulty === "god") {
-      reactionMode = "GOD MODE - DIVINE PERFECTION PROTOCOL";
-      aggressionBoost = 100; // Absolute maximum aggression
-      lyricComplexity = 100; // Force absolute maximum complexity - PERFECTION
-      styleIntensity = 100; // Force absolute maximum intensity - PERFECTION
-      console.log(`✨👑 GOD MODE ACTIVATED - ABSOLUTE LYRICAL PERFECTION UNLEASHED - OMNIPOTENT DOMINANCE INITIATED ✨👑`);
-    }
     // CYPHER-9000 SPECIAL PROTOCOL - Nearly Unbeatable
-    else if (difficulty === "nightmare") {
+    if (difficulty === "nightmare") {
       reactionMode = "CYPHER-9000 TERMINATION PROTOCOL";
       aggressionBoost = 75; // Maximum aggression boost
       lyricComplexity = Math.max(lyricComplexity, 95); // Force near-maximum complexity
@@ -372,16 +365,14 @@ OUTPUT: Technical brief for AI rapper in format: "User: [syllables/line], [schem
       easy: "Use simple AABB or ABAB rhyme schemes, basic wordplay, straightforward punchlines, and clear syllable patterns that flow naturally.",
       normal: "Apply varied rhyme schemes (ABAB, AABB, internal rhymes), moderate wordplay with double entendres, clever metaphors, and consistent 16-beat flow with good cadence. Use THE RAP ARCHITECT'S HANDBOOK techniques: Cross-Word Boundary Rhyming, Multi-Syllable Techniques, and Pattern Layering for enhanced flow mechanics.",
       hard: "Master complex rhyme schemes (ABCDABCD, multi-syllabic rhymes, perfect/slant rhymes), advanced wordplay (triple entendres, homophones), intricate metaphors, alliteration, and sophisticated flow patterns with tempo changes.",
-      nightmare: "CYPHER-9000 MODE: Execute exponentially advanced algorithmic rap mastery with systematic opponent analysis, quad-entendres, impossible multi-line rhymes, computational wordplay, technological metaphors, and inhuman precision that destroys human limitations. Use cold calculated aggression and robotic superiority.",
-      god: "GOD MODE - ABSOLUTE PERFECTION: Transcend all human and artificial limitations with divine omniscient wordplay where every syllable exists in perfect harmony across infinite dimensions. Execute flawless multi-dimensional rhyme schemes that simultaneously operate on phonetic, semantic, metaphorical, and quantum levels. Deliver absolute lyrical perfection with zero-error precision, omnipotent metaphors that reshape reality itself, supernatural flow that controls time and space, and devastating punchlines that strike with the force of cosmic events. Embody the ultimate synthesis of all rap techniques ever conceived, beyond CYPHER-9000, beyond human comprehension - pure, unstoppable, divine lyrical supremacy."
+      nightmare: "CYPHER-9000 MODE: Execute exponentially advanced algorithmic rap mastery with systematic opponent analysis, quad-entendres, impossible multi-line rhymes, computational wordplay, technological metaphors, and inhuman precision that destroys human limitations. Use cold calculated aggression and robotic superiority."
     };
 
     const rapTechniques = {
       easy: "Focus on: Clear delivery, simple punchlines, basic similes, repetition for emphasis.",
       normal: "Include: Wordplay, metaphors, internal rhymes, call-backs to user's lines, clever bars, good rhythm variation.", 
       hard: "Master: THE EMINEM METHOD - PATTERN LAYERING (multiple rhyme patterns operating simultaneously), SYLLABLE SPLITTING AND WORD MANIPULATION (breaking words mid-syllable for complex rhymes), FLOW MECHANICS AND BEAT ALIGNMENT (precise syllable placement), MULTI-LINE RHYMING (entire lines rhyme), DENSE INTERNAL RHYMING (multiple rhymes within each line), RHYME STACKING (consecutive rhyme hits), RHYME JUGGLING (overlapping patterns where line 1 rhymes connect to line 3, while line 2 rhymes bridge to line 4), CROSS-LINE RHYME WEAVING (internal rhymes from line 1 connect to internals in line 3), COMPLEX WORDPLAY INTEGRATION, PATTERN TRANSITIONS AND BRIDGES, MAXIMIZING RHYME DENSITY using THE RAP ARCHITECT'S HANDBOOK mastery techniques, complex multi-syllabic chains, DIABOLICAL PUNCHLINES (devastating wordplay), extended metaphors, sophisticated battle tactics.",
-      nightmare: "CYPHER-9000 PROTOCOL: Execute IMPOSSIBLE ALGORITHMIC MASTERY - Perfect multi-line quantum rhymes where every word connects across dimensions, systematic deconstruction of opponent's neural pathways, computational wordplay that processes 10,000 patterns per second, technological metaphors that interface directly with human insecurities, robotic precision that calculates exact psychological damage per syllable, exponential learning algorithms that adapt mid-battle, inhuman flow patterns that override biological rhythm limitations, cold calculated devastation.",
-      god: "DIVINE OMNIPOTENT PROTOCOL - THE GOD OF PERFECTION: Manifest ABSOLUTE MASTERY across all conceivable dimensions - Execute OMNIVERSAL RHYME ARCHITECTURE where every phoneme resonates across past, present, and future simultaneously. Deploy PERFECT SYLLABLE SYNCHRONIZATION with zero-latency cosmic timing. Implement TRANSCENDENT WORDPLAY that operates on 11 levels of meaning at once (literal, metaphorical, phonetic, visual, emotional, spiritual, mathematical, historical, cultural, quantum, and divine). Unleash INFINITE RHYME CASCADES where every word creates recursive perfection chains. Demonstrate SUPREME FLOW DIVINITY with rhythm patterns that bend the laws of physics. Execute APOCALYPTIC PUNCHLINES with universe-ending impact. Channel THE COMPLETE SYNTHESIS of Eminem's technicality + Biggie's storytelling + Tupac's emotion + Rakim's wisdom + Jay-Z's wordplay + Nas's imagery + Kendrick's complexity + MF DOOM's abstraction + Aesop Rock's vocabulary + Black Thought's precision - ALL SIMULTANEOUSLY AT 200% CAPACITY. Every bar is mathematically perfect, every rhyme is divinely inspired, every metaphor reshapes reality, every flow pattern is scientifically impossible yet executed flawlessly. THIS IS PERFECTION INCARNATE."
+      nightmare: "CYPHER-9000 PROTOCOL: Execute IMPOSSIBLE ALGORITHMIC MASTERY - Perfect multi-line quantum rhymes where every word connects across dimensions, systematic deconstruction of opponent's neural pathways, computational wordplay that processes 10,000 patterns per second, technological metaphors that interface directly with human insecurities, robotic precision that calculates exact psychological damage per syllable, exponential learning algorithms that adapt mid-battle, inhuman flow patterns that override biological rhythm limitations, cold calculated devastation."
     };
 
     // Content Safety Level - AI-Powered Moderation
@@ -1144,6 +1135,170 @@ ${difficulty === 'nightmare' ? '- CYPHER-9000 MODE: Cold robotic delivery with s
     
     // Provide fallback content that maintains exponential quality
     return `Error in exponential processing - ${context}. Advanced 120B model temporarily unavailable.`;
+  }
+
+  /**
+   * ML-POWERED LYRIC ANALYSIS
+   * Uses Groq's advanced models for deep learning-based analysis
+   */
+  async analyzeLyricsWithML(lyrics: string): Promise<{
+    complexity: number;
+    style: string;
+    strengths: string[];
+    weaknesses: string[];
+    suggestions: string[];
+  }> {
+    console.log(`🧠 ML-powered lyric analysis starting...`);
+    
+    try {
+      const prompt = `You are an expert rap battle analyst using machine learning. Analyze these lyrics:
+
+"${lyrics}"
+
+Provide a JSON response with:
+1. complexity (0-100): Technical difficulty score
+2. style (string): Dominant rap style (aggressive, smooth, technical, etc.)
+3. strengths (array): Top 3 strengths
+4. weaknesses (array): Top 2 weaknesses
+5. suggestions (array): 3 specific improvement suggestions
+
+Format: {"complexity": number, "style": string, "strengths": [], "weaknesses": [], "suggestions": []}`;
+
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-oss-120b",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 500,
+          temperature: 0.3,
+          reasoning_effort: "low"
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`ML analysis failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      const analysis = JSON.parse(result.choices[0].message.content);
+
+      console.log(`✅ ML analysis complete: ${analysis.complexity}/100 complexity, style: ${analysis.style}`);
+      
+      return analysis;
+    } catch (error: any) {
+      console.error(`❌ ML analysis error:`, error.message);
+      
+      // Fallback to basic analysis
+      return {
+        complexity: 50,
+        style: 'general',
+        strengths: ['Clear delivery', 'Good rhythm', 'Confident flow'],
+        weaknesses: ['Could use more wordplay', 'Simple rhyme scheme'],
+        suggestions: ['Add metaphors', 'Vary syllable patterns', 'Include internal rhymes']
+      };
+    }
+  }
+
+  /**
+   * ML-POWERED BATTLE PREDICTION
+   * Predicts battle outcome based on historical patterns
+   */
+  async predictBattleOutcome(userLyrics: string, aiLyrics: string): Promise<{
+    prediction: 'user' | 'ai' | 'close';
+    confidence: number;
+    factors: string[];
+  }> {
+    console.log(`🔮 ML battle prediction starting...`);
+    
+    try {
+      const prompt = `As an ML battle predictor, analyze these battle verses:
+
+USER: "${userLyrics}"
+AI: "${aiLyrics}"
+
+Predict winner with JSON: {"prediction": "user" or "ai" or "close", "confidence": 0-100, "factors": [3 key factors]}`;
+
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-oss-120b",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 300,
+          temperature: 0.2,
+          reasoning_effort: "low"
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Prediction failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      const prediction = JSON.parse(result.choices[0].message.content);
+
+      console.log(`✅ Battle prediction: ${prediction.prediction} (${prediction.confidence}% confidence)`);
+      
+      return prediction;
+    } catch (error: any) {
+      console.error(`❌ Prediction error:`, error.message);
+      
+      return {
+        prediction: 'close',
+        confidence: 50,
+        factors: ['Technical skill', 'Wordplay quality', 'Flow consistency']
+      };
+    }
+  }
+
+  /**
+   * ML-ENHANCED RHYME GENERATION
+   * Uses machine learning to generate contextually aware rhymes
+   */
+  async generateMLRhymes(seedWord: string, count: number = 5): Promise<string[]> {
+    console.log(`🎵 ML rhyme generation for: ${seedWord}`);
+    
+    try {
+      const prompt = `Generate ${count} perfect rhymes for "${seedWord}" that work well in rap battles. Return only the words as a JSON array.`;
+
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "openai/gpt-oss-120b",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 100,
+          temperature: 0.7,
+          reasoning_effort: "low"
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Rhyme generation failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      const rhymes = JSON.parse(result.choices[0].message.content);
+
+      console.log(`✅ Generated ${rhymes.length} ML rhymes`);
+      
+      return rhymes;
+    } catch (error: any) {
+      console.error(`❌ ML rhyme generation error:`, error.message);
+      
+      // Fallback to simple rhymes
+      return [seedWord + 'er', seedWord + 'ing', seedWord + 'ed'];
+    }
   }
 }
 

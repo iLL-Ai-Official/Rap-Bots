@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
 import { apiRequest } from '@/lib/queryClient';
+import { SEO, generateWebPageStructuredData } from '@/components/SEO';
 import type { Tournament } from '@shared/schema';
 const tournamentImage = "/images/Tournament_championship_bracket_0fd32970.png";
 
@@ -43,6 +44,12 @@ export default function Tournaments() {
     styleIntensity: 50,
     prize: 'Tournament Champion Title'
   });
+
+  const structuredData = generateWebPageStructuredData(
+    "Tournaments - Compete in Rap Battle Tournaments",
+    "Create and compete in rap battle tournaments. Face multiple AI opponents in elimination-style competitions to prove your skills.",
+    "https://rapbots.online/tournaments"
+  );
 
   // Fetch user's tournaments
   const { data: tournaments, isLoading } = useQuery<Tournament[]>({
@@ -102,6 +109,12 @@ export default function Tournaments() {
 
   return (
     <div className="min-h-screen bg-black text-white p-4 relative">
+      <SEO
+        title="Tournaments - Compete in Rap Battle Tournaments | Battle Rap AI"
+        description="Create and compete in rap battle tournaments. Face multiple AI opponents in elimination-style competitions to prove your skills and become the champion."
+        keywords={['rap tournament', 'battle tournament', 'AI competition', 'rap bracket', 'elimination tournament', 'battle championship']}
+        structuredData={structuredData}
+      />
       {/* Tournament Background */}
       <div 
         className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-12 z-0 pointer-events-none"

@@ -4,11 +4,24 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { APIKeyManager } from '@/components/api-key-manager';
 import { Settings2, Mic, Key, Shield } from 'lucide-react';
+import { SEO, generateWebPageStructuredData } from '@/components/SEO';
 const settingsImage = "/images/Audio_settings_interface_5e678558.png";
 
 export default function SettingsPage() {
+  const structuredData = generateWebPageStructuredData(
+    "Settings - Configure Your Battle Rap Experience",
+    "Customize your rap battle settings, manage API keys for TTS services, and configure battle preferences.",
+    "https://rapbots.online/settings"
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4 relative" data-testid="page-settings">
+      <SEO
+        title="Settings - Configure Your Battle Rap AI Experience"
+        description="Customize your rap battle settings, manage API keys for TTS services, and configure battle preferences for optimal performance."
+        keywords={['settings', 'API keys', 'TTS configuration', 'battle settings', 'account management']}
+        structuredData={structuredData}
+      />
       {/* Settings Background */}
       <div 
         className="fixed inset-0 bg-cover bg-center bg-no-repeat opacity-12 z-0 pointer-events-none"

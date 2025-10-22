@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Bot, Zap, TrendingUp, Swords } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 
 interface UserClone {
   id: string;
@@ -25,7 +25,7 @@ interface UserClone {
 export default function CloneManager() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [, navigate] = useNavigate();
+  const [, setLocation] = useLocation();
 
   // Fetch user's clone
   const { data: clone, isLoading, error } = useQuery<UserClone>({
@@ -64,7 +64,7 @@ export default function CloneManager() {
   const handleBattleClone = () => {
     if (clone) {
       // Navigate to battle arena with clone as opponent
-      navigate(`/?opponent=clone_${clone.id}`);
+      setLocation(`/?opponent=clone_${clone.id}`);
     }
   };
 

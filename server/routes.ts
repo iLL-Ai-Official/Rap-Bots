@@ -26,10 +26,13 @@ const upload = multer({
   },
 });
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+let stripe: Stripe | null = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+  console.log('✅ Stripe initialized');
+} else {
+  console.warn('⚠️ STRIPE_SECRET_KEY not provided - Payment features will be unavailable');
 }
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Service Worker endpoint for PWA functionality
@@ -159,6 +162,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clientSecret: `cashapp_battles_cs_${Date.now()}_${userId}`,
           amount: packageInfo.price,
           description: packageInfo.description
+        });
+      }
+
+      // Check if Stripe is configured
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment system is not configured. Please contact support or use an alternative payment method.' 
         });
       }
 
@@ -363,6 +373,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // One-time payment intent (like ThcaStore's approach)
   app.post("/api/create-payment-intent", isAuthenticated, async (req: any, res) => {
     try {
+      // Check if Stripe is configured
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment system is not configured. Please contact support or use an alternative payment method.' 
+        });
+      }
+
       const { amount, description = "Battle pack purchase" } = req.body;
       const userId = req.user.claims.sub;
 
@@ -402,6 +419,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({
           subscriptionId: `cashapp_${tier}_${Date.now()}`,
           clientSecret: `cashapp_cs_${Date.now()}_${userId}`,
+        });
+      }
+
+      // Check if Stripe is configured
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment system is not configured. Please contact support or use an alternative payment method.' 
         });
       }
 
@@ -541,6 +565,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Stripe webhook for payment updates (subscriptions + one-time purchases)
   app.post('/api/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => {
+    // Check if Stripe is configured
+    if (!stripe) {
+      return res.status(503).json({ 
+        error: 'Payment system is not configured' 
+      });
+    }
+
     let event;
 
     try {
@@ -1151,7 +1182,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let adjustedComplexity = battle.lyricComplexity || 50;
       let adjustedIntensity = battle.styleIntensity || 50;
 
-      if (isCloneBattle) {
+      if (isCloneBattle && battle.aiCharacterId) {
         console.log(`🤖 Clone battle detected - adjusting AI to match user's skill level`);
         const cloneId = battle.aiCharacterId.replace('clone_', '');
         const clone = await storage.getCloneById(cloneId);

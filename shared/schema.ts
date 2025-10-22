@@ -332,3 +332,34 @@ export const insertWebhookEventSchema = createInsertSchema(processedWebhookEvent
 
 export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;
 export type ProcessedWebhookEvent = typeof processedWebhookEvents.$inferSelect;
+
+// User Clones table - Bot clones of users that match their skill level
+export const userClones = pgTable("user_clones", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  cloneName: varchar("clone_name").notNull(), // e.g., "Shadow User" or custom name
+  skillLevel: integer("skill_level").notNull().default(50), // 0-100, based on user's average performance
+  avgRhymeDensity: integer("avg_rhyme_density").notNull().default(50), // Average rhyme density score
+  avgFlowQuality: integer("avg_flow_quality").notNull().default(50), // Average flow quality score
+  avgCreativity: integer("avg_creativity").notNull().default(50), // Average creativity score
+  battlesAnalyzed: integer("battles_analyzed").notNull().default(0), // Number of user battles used for analysis
+  style: text("style").notNull().default("balanced"), // User's battle style
+  voiceId: text("voice_id"), // Voice ID for TTS (can use similar voice to user's preferred)
+  isActive: boolean("is_active").notNull().default(true), // Whether clone is active/available
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertUserCloneSchema = createInsertSchema(userClones).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertUserClone = z.infer<typeof insertUserCloneSchema>;
+export type UserClone = typeof userClones.$inferSelect;
+
+// Relations for user clones
+export const userCloneRelations = relations(userClones, ({ one }) => ({
+  user: one(users, { fields: [userClones.userId], references: [users.id] }),
+}));

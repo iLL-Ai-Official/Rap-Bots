@@ -27,14 +27,15 @@ The application is built with a clear separation between frontend and backend se
 - **Frontend**: React + Vite, Tailwind CSS, TanStack Query for data management, Wouter for routing, and Framer Motion for animations.
 - **Rap Generation**: Utilizes Groq's Llama model, optimized with advanced prompting for complex lyrical techniques, multi-syllabic rhymes, and battle tactics. Output is clean, focusing solely on rap verses.
 - **Scoring System**: Analyzes rhyme density (end, internal, multi-syllabic), flow quality (syllable count, rhythm), and creativity (wordplay, metaphors, originality).
-- **Audio & Voice**: Instant transcription (500ms response), user-managed API key system for OpenAI gpt-4o-mini-tts (2025) with steerability features, Groq PlayAI TTS models (10x real-time), intelligent TTS routing with system fallbacks (Bark TTS + Typecast), and ARTalk for speech-driven 3D head animation and lip sync. FFmpeg is used for audio processing.
-- **User API Management**: Secure storage of personal API keys for OpenAI and Groq services, preference-based TTS selection, comprehensive settings interface, automatic fallback to system keys.
+- **Audio & Voice**: Instant transcription (500ms response), user-managed API key system for OpenAI gpt-4o-mini-tts (2025) with steerability features, Groq PlayAI TTS models (10x real-time), **ElevenLabs TTS with advanced battle rap optimization (native speed control 0.5x-1.5x, breath pattern system, Turbo models for sub-second generation, pronunciation dictionaries for rap slang)**, intelligent TTS routing with system fallbacks (Bark TTS + Typecast), and ARTalk for speech-driven 3D head animation and lip sync. FFmpeg is used for audio processing.
+- **User API Management**: Secure storage of personal API keys for OpenAI, Groq, and ElevenLabs services, preference-based TTS selection, comprehensive settings interface, automatic fallback to system keys.
 - **Monetization**: Replit Auth for user authentication, PostgreSQL for user and battle data, Stripe for secure subscription payments (Free, Premium, Pro tiers).
 - **Security**: Robust input validation, enhanced error handling to prevent information leakage, content moderation (Llama Guard 4), encrypted API key storage, and secure handling of audio files (format validation, size limits).
 
 ## External Dependencies
 - **Groq API**: For instant speech-to-text (Whisper), AI rap generation (Llama), and PlayAI TTS models.
 - **OpenAI API**: For gpt-4o-mini-tts (2025) with steerability features for authentic rapper voices.
+- **ElevenLabs API**: Premium TTS with advanced features - native speed control, breath patterns, Turbo models (sub-second generation), pronunciation dictionaries for rap terminology. See [ELEVENLABS_ENHANCEMENTS.md](./ELEVENLABS_ENHANCEMENTS.md) for full feature documentation.
 - **Typecast.ai**: For text-to-speech generation using specific voice IDs (system fallback).
 - **ARTalk**: For advanced speech-driven 3D head animation and lip-sync.
 - **Stripe**: For secure payment processing and subscription management.

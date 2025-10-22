@@ -67,4 +67,5 @@ test_*.js
 optimize_*.py
 generate_*.py
 emergency_*.ts
-final_*.js
+final_*.js# Test files
+test-elevenlabs-enhancements.ts

@@ -756,9 +756,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Voice speed must be between 0.5-2.0" });
       }
 
-      // SECURITY: Validate AI character selection
+      // SECURITY: Validate AI character selection (including clones)
       const validCharacters = ['razor', 'venom', 'silk', 'cypher'];
-      if (aiCharacterId && !validCharacters.includes(aiCharacterId)) {
+      const isCloneBattle = aiCharacterId?.startsWith('clone_');
+      
+      if (aiCharacterId && !validCharacters.includes(aiCharacterId) && !isCloneBattle) {
         return res.status(400).json({ message: "Invalid AI character" });
       }
 
@@ -1587,6 +1589,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error serving SFX file:', error);
       res.status(500).json({ error: 'Failed to serve SFX file' });
+    }
+  });
+
+  // User Clone endpoints
+  app.get('/api/user/clone', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const clone = await storage.getUserClone(userId);
+      
+      if (!clone) {
+        return res.status(404).json({ message: 'No clone found. Create one by analyzing your battles!' });
+      }
+
+      res.json(clone);
+    } catch (error) {
+      console.error('Error fetching user clone:', error);
+      res.status(500).json({ message: 'Failed to fetch clone' });
+    }
+  });
+
+  app.post('/api/user/clone/generate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      console.log(`🤖 Generating clone for user ${userId}...`);
+      const clone = await storage.createOrUpdateUserClone(userId);
+      
+      console.log(`✅ Clone generated: ${clone.cloneName} (Skill: ${clone.skillLevel})`);
+      res.json(clone);
+    } catch (error) {
+      console.error('Error generating user clone:', error);
+      res.status(500).json({ message: 'Failed to generate clone' });
+    }
+  });
+
+  app.get('/api/clone/:cloneId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { cloneId } = req.params;
+      const clone = await storage.getCloneById(cloneId);
+      
+      if (!clone) {
+        return res.status(404).json({ message: 'Clone not found' });
+      }
+
+      res.json(clone);
+    } catch (error) {
+      console.error('Error fetching clone:', error);
+      res.status(500).json({ message: 'Failed to fetch clone' });
     }
   });
 

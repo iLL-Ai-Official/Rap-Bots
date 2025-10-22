@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Volume2, VolumeX } from "lucide-react";
+import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Volume2, VolumeX, Bot } from "lucide-react";
 import { Link } from "wouter";
 import { useState, useEffect, useRef } from "react";
 import themeSong from "@assets/Lyrical sauce, you can't handle the boss_1756951536849.mp3";
@@ -240,7 +240,7 @@ export default function Home() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        <div className="grid md:grid-cols-4 gap-6 mb-8">
           <Card className="bg-gradient-to-r from-purple-800 to-purple-600 border-purple-500 text-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -292,6 +292,25 @@ export default function Home() {
               <Link href="/tournaments">
                 <Button className="w-full bg-white text-amber-600 hover:bg-gray-100 font-semibold" data-testid="button-tournament-mode">
                   Enter Tournament
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-r from-blue-800 to-purple-600 border-blue-500 text-white">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Bot className="h-5 w-5" />
+                Clone Manager
+              </CardTitle>
+              <CardDescription className="text-blue-100">
+                Create and battle against an AI clone of yourself
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/clone">
+                <Button className="w-full bg-white text-blue-600 hover:bg-gray-100 font-semibold" data-testid="button-clone">
+                  Manage Clone
                 </Button>
               </Link>
             </CardContent>

@@ -27,10 +27,14 @@ const upload = multer({
   },
 });
 
-if (!process.env.STRIPE_SECRET_KEY) {
-  throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
+// Initialize Stripe only if the secret key is provided
+const stripe = process.env.STRIPE_SECRET_KEY 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY)
+  : null;
+
+if (!stripe) {
+  console.warn('⚠️ Stripe not configured - payment features will be disabled');
 }
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Service Worker endpoint for PWA functionality
@@ -160,6 +164,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           clientSecret: `cashapp_battles_cs_${Date.now()}_${userId}`,
           amount: packageInfo.price,
           description: packageInfo.description
+        });
+      }
+
+      // Check if Stripe is configured for card payments
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment processing is currently unavailable. Please contact support.' 
         });
       }
 
@@ -364,6 +375,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // One-time payment intent (like ThcaStore's approach)
   app.post("/api/create-payment-intent", isAuthenticated, async (req: any, res) => {
     try {
+      // Check if Stripe is configured
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment processing is currently unavailable. Please contact support.' 
+        });
+      }
+
       const { amount, description = "Battle pack purchase" } = req.body;
       const userId = req.user.claims.sub;
 
@@ -403,6 +421,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({
           subscriptionId: `cashapp_${tier}_${Date.now()}`,
           clientSecret: `cashapp_cs_${Date.now()}_${userId}`,
+        });
+      }
+
+      // Check if Stripe is configured for card payments
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment processing is currently unavailable. Please contact support.' 
         });
       }
 
@@ -542,6 +567,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Stripe webhook for payment updates (subscriptions + one-time purchases)
   app.post('/api/stripe-webhook', express.raw({type: 'application/json'}), async (req, res) => {
+    // Check if Stripe is configured
+    if (!stripe) {
+      console.warn('⚠️ Stripe webhook called but Stripe is not configured');
+      return res.status(503).json({ 
+        message: 'Payment processing is currently unavailable.' 
+      });
+    }
+
     let event;
 
     try {
@@ -815,9 +848,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Voice speed must be between 0.5-2.0" });
       }
 
-      // SECURITY: Validate AI character selection
+      // SECURITY: Validate AI character selection (including clones)
       const validCharacters = ['razor', 'venom', 'silk', 'cypher'];
-      if (aiCharacterId && !validCharacters.includes(aiCharacterId)) {
+      const isCloneBattle = aiCharacterId?.startsWith('clone_');
+      
+      if (aiCharacterId && !validCharacters.includes(aiCharacterId) && !isCloneBattle) {
         return res.status(400).json({ message: "Invalid AI character" });
       }
 
@@ -1204,6 +1239,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userPerformanceScore = scoringService.calculateUserScore(userText);
       console.log(`🎯 User performance: ${userPerformanceScore}/100 - AI will react accordingly`);
 
+      // Check if this is a clone battle and adjust difficulty/complexity accordingly
+      const isCloneBattle = battle.aiCharacterId?.startsWith('clone_');
+      let adjustedDifficulty = battle.difficulty;
+      let adjustedComplexity = battle.lyricComplexity || 50;
+      let adjustedIntensity = battle.styleIntensity || 50;
+
+      if (isCloneBattle) {
+        console.log(`🤖 Clone battle detected - adjusting AI to match user's skill level`);
+        const cloneId = battle.aiCharacterId.replace('clone_', '');
+        const clone = await storage.getCloneById(cloneId);
+        
+        if (clone) {
+          // Adjust AI difficulty based on clone's skill level
+          adjustedComplexity = clone.avgRhymeDensity;
+          adjustedIntensity = clone.skillLevel;
+          
+          // Map skill level to difficulty
+          if (clone.skillLevel < 40) adjustedDifficulty = 'easy';
+          else if (clone.skillLevel >= 40 && clone.skillLevel < 65) adjustedDifficulty = 'normal';
+          else if (clone.skillLevel >= 65 && clone.skillLevel < 85) adjustedDifficulty = 'hard';
+          else adjustedDifficulty = 'nightmare';
+          
+          console.log(`🎯 Clone AI settings: difficulty=${adjustedDifficulty}, complexity=${adjustedComplexity}, intensity=${adjustedIntensity}`);
+        }
+      }
+
       // NOW generate AI response with user score context for reactive behavior
       console.log(`🤖 Generating AI response for: "${userText.substring(0, 30)}..."`);
 
@@ -1213,10 +1274,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         aiResponseText = await Promise.race([
           groqService.generateRapResponse(
             userText, // Use actual transcription for better AI response
-            battle.difficulty, 
+            adjustedDifficulty, 
             battle.profanityFilter,
-            battle.lyricComplexity || 50,
-            battle.styleIntensity || 50,
+            adjustedComplexity,
+            adjustedIntensity,
             userPerformanceScore // Pass user score for reactive AI
           ),
           new Promise<string>((_, reject) => 
@@ -1798,6 +1859,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error serving SFX file:', error);
       res.status(500).json({ error: 'Failed to serve SFX file' });
+    }
+  });
+
+  // User Clone endpoints
+  app.get('/api/user/clone', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const clone = await storage.getUserClone(userId);
+      
+      if (!clone) {
+        return res.status(404).json({ message: 'No clone found. Create one by analyzing your battles!' });
+      }
+
+      res.json(clone);
+    } catch (error) {
+      console.error('Error fetching user clone:', error);
+      res.status(500).json({ message: 'Failed to fetch clone' });
+    }
+  });
+
+  app.post('/api/user/clone/generate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      console.log(`🤖 Generating clone for user ${userId}...`);
+      const clone = await storage.createOrUpdateUserClone(userId);
+      
+      console.log(`✅ Clone generated: ${clone.cloneName} (Skill: ${clone.skillLevel})`);
+      res.json(clone);
+    } catch (error) {
+      console.error('Error generating user clone:', error);
+      res.status(500).json({ message: 'Failed to generate clone' });
+    }
+  });
+
+  app.get('/api/clone/:cloneId', isAuthenticated, async (req: any, res) => {
+    try {
+      const { cloneId } = req.params;
+      const clone = await storage.getCloneById(cloneId);
+      
+      if (!clone) {
+        return res.status(404).json({ message: 'Clone not found' });
+      }
+
+      res.json(clone);
+    } catch (error) {
+      console.error('Error fetching clone:', error);
+      res.status(500).json({ message: 'Failed to fetch clone' });
     }
   });
 

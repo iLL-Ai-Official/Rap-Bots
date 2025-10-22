@@ -5,6 +5,7 @@ import {
   tournamentBattles,
   referrals,
   processedWebhookEvents,
+  userClones,
   type User,
   type UpsertUser,
   type Battle,
@@ -21,6 +22,8 @@ import {
   type TournamentPlayer,
   type ProcessedWebhookEvent,
   type InsertWebhookEvent,
+  type UserClone,
+  type InsertUserClone,
   SUBSCRIPTION_TIERS,
 } from "@shared/schema";
 import { db, withRetry } from "./db";
@@ -94,6 +97,11 @@ export interface IStorage {
   // Webhook idempotency operations
   getProcessedWebhookEvent(eventId: string): Promise<ProcessedWebhookEvent | undefined>;
   recordProcessedWebhookEvent(event: InsertWebhookEvent): Promise<ProcessedWebhookEvent>;
+
+  // User Clone operations
+  getUserClone(userId: string): Promise<UserClone | undefined>;
+  createOrUpdateUserClone(userId: string): Promise<UserClone>;
+  getCloneById(cloneId: string): Promise<UserClone | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -715,6 +723,151 @@ export class DatabaseStorage implements IStorage {
       { maxAttempts: 3 },
       `recordProcessedWebhookEvent for ${event.eventId}`
     );
+  }
+
+  // User Clone operations
+  async getUserClone(userId: string): Promise<UserClone | undefined> {
+    try {
+      const [clone] = await db
+        .select()
+        .from(userClones)
+        .where(and(
+          eq(userClones.userId, userId),
+          eq(userClones.isActive, true)
+        ))
+        .limit(1);
+      
+      return clone;
+    } catch (error) {
+      console.error('Error fetching user clone:', error);
+      throw error;
+    }
+  }
+
+  async createOrUpdateUserClone(userId: string): Promise<UserClone> {
+    return withRetry(
+      async () => {
+        // Get user's battle history to analyze performance
+        const userBattles = await this.getUserBattles(userId, 10); // Last 10 battles
+        
+        if (userBattles.length === 0) {
+          // No battles yet - create default clone
+          const user = await this.getUser(userId);
+          const cloneName = user?.firstName ? `${user.firstName}'s Clone` : "Your Clone";
+          
+          const [newClone] = await db
+            .insert(userClones)
+            .values({
+              userId,
+              cloneName,
+              skillLevel: 50, // Default skill level
+              avgRhymeDensity: 50,
+              avgFlowQuality: 50,
+              avgCreativity: 50,
+              battlesAnalyzed: 0,
+              style: "balanced",
+              voiceId: "Thunder-PlayAI", // Default voice
+            })
+            .returning();
+          
+          return newClone;
+        }
+
+        // Calculate average performance metrics from battles
+        let totalUserScore = 0;
+        let totalRhyme = 0;
+        let totalFlow = 0;
+        let totalCreativity = 0;
+        let roundsCount = 0;
+
+        for (const battle of userBattles) {
+          totalUserScore += battle.userScore;
+          
+          // Analyze rounds for detailed metrics
+          if (battle.rounds && Array.isArray(battle.rounds)) {
+            for (const round of battle.rounds) {
+              if (round.scores) {
+                totalRhyme += round.scores.rhymeDensity || 0;
+                totalFlow += round.scores.flowQuality || 0;
+                totalCreativity += round.scores.creativity || 0;
+                roundsCount++;
+              }
+            }
+          }
+        }
+
+        const avgUserScore = Math.round(totalUserScore / userBattles.length);
+        const avgRhyme = roundsCount > 0 ? Math.round(totalRhyme / roundsCount) : 50;
+        const avgFlow = roundsCount > 0 ? Math.round(totalFlow / roundsCount) : 50;
+        const avgCreativity = roundsCount > 0 ? Math.round(totalCreativity / roundsCount) : 50;
+
+        // Determine style based on metrics
+        let style = "balanced";
+        if (avgRhyme > 70) style = "technical";
+        else if (avgFlow > 70) style = "smooth";
+        else if (avgCreativity > 70) style = "creative";
+
+        const user = await this.getUser(userId);
+        const cloneName = user?.firstName ? `${user.firstName}'s Clone` : "Your Clone";
+
+        // Check if clone exists
+        const existingClone = await this.getUserClone(userId);
+
+        if (existingClone) {
+          // Update existing clone
+          const [updatedClone] = await db
+            .update(userClones)
+            .set({
+              skillLevel: avgUserScore,
+              avgRhymeDensity: avgRhyme,
+              avgFlowQuality: avgFlow,
+              avgCreativity: avgCreativity,
+              battlesAnalyzed: userBattles.length,
+              style,
+              updatedAt: new Date(),
+            })
+            .where(eq(userClones.id, existingClone.id))
+            .returning();
+          
+          return updatedClone;
+        } else {
+          // Create new clone
+          const [newClone] = await db
+            .insert(userClones)
+            .values({
+              userId,
+              cloneName,
+              skillLevel: avgUserScore,
+              avgRhymeDensity: avgRhyme,
+              avgFlowQuality: avgFlow,
+              avgCreativity: avgCreativity,
+              battlesAnalyzed: userBattles.length,
+              style,
+              voiceId: "Thunder-PlayAI", // Default voice
+            })
+            .returning();
+          
+          return newClone;
+        }
+      },
+      { maxAttempts: 3 },
+      `createOrUpdateUserClone for ${userId}`
+    );
+  }
+
+  async getCloneById(cloneId: string): Promise<UserClone | undefined> {
+    try {
+      const [clone] = await db
+        .select()
+        .from(userClones)
+        .where(eq(userClones.id, cloneId))
+        .limit(1);
+      
+      return clone;
+    } catch (error) {
+      console.error('Error fetching clone by ID:', error);
+      throw error;
+    }
   }
 }
 

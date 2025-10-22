@@ -5,8 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Bot, Zap, TrendingUp, Swords } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useNavigate } from "wouter";
-import { CloneBattleSponsorCard } from "@/components/clone-battle-sponsor-card";
+import { useLocation } from "wouter";
 
 interface UserClone {
   id: string;
@@ -26,7 +25,7 @@ interface UserClone {
 export default function CloneManager() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [, navigate] = useNavigate();
+  const [, navigate] = useLocation();
 
   // Fetch user's clone
   const { data: clone, isLoading, error } = useQuery<UserClone>({
@@ -212,19 +211,6 @@ export default function CloneManager() {
             </CardContent>
           </Card>
 
-          {/* Clone Battle Sponsorship Example */}
-          <div className="mb-8">
-            <CloneBattleSponsorCard 
-              sponsorship={{
-                id: 'demo-sponsor-1',
-                sponsorName: 'Battle Rap League',
-                amount: 25,
-                cloneBattlesSponsored: 150
-              }}
-              showInBattle={false}
-            />
-          </div>
-
           <Card>
             <CardHeader>
               <CardTitle>About Your Clone</CardTitle>
@@ -238,9 +224,6 @@ export default function CloneManager() {
               </p>
               <p className="text-sm">
                 <strong>Tip:</strong> Battle your clone regularly to see how you match up against yourself and identify areas for improvement.
-              </p>
-              <p className="text-sm mt-4 p-3 bg-blue-900/20 border border-blue-500/50 rounded-lg">
-                <strong>🚀 Pro Tip:</strong> Premium and Pro members can sponsor clone battles for branding opportunities and support the community!
               </p>
             </CardContent>
           </Card>

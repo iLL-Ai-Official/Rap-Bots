@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Mic, Trophy, Clock, Flame, Wifi, History, Share, Dumbbell, User, BarChart3 } from "lucide-react";
 import { CharacterSelector } from "@/components/character-selector";
 import type { BattleCharacter } from "@shared/characters";
+import { cloneToBattleCharacter } from "@shared/characters";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
@@ -204,6 +205,31 @@ export default function BattleArena() {
       // Cleanup all mobile scroll prevention
       cleanupFunctions.forEach(cleanup => cleanup());
     };
+  }, []);
+
+  // Check for URL parameter to pre-select clone opponent
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const opponent = urlParams.get('opponent');
+    
+    if (opponent && opponent.startsWith('clone_')) {
+      // Fetch clone data and auto-select it
+      fetch(`/api/clone/${opponent.replace('clone_', '')}`, {
+        credentials: 'include',
+      })
+        .then(res => res.json())
+        .then(clone => {
+          const cloneCharacter = cloneToBattleCharacter(clone);
+          setSelectedCharacter(cloneCharacter);
+          setShowCharacterSelector(false);
+          // Auto-start battle
+          startNewBattle(difficulty, profanityFilter, cloneCharacter.id, lyricComplexity, styleIntensity, advancedSettings.voiceSpeed);
+        })
+        .catch(err => {
+          console.error('Failed to load clone:', err);
+          setShowCharacterSelector(true);
+        });
+    }
   }, []);
 
   // Initialize new battle on component mount

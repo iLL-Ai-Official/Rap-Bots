@@ -11,6 +11,9 @@ This script shows:
 - Making requests with MCP tool support
 - Handling tool calls and responses
 
+Installation:
+    pip install openai
+
 Usage:
     GROQ_API_KEY=gsk_... python scripts/groq_mcp_demo.py
 
@@ -21,7 +24,13 @@ Optional:
 import os
 import sys
 import json
-from openai import OpenAI
+
+try:
+    from openai import OpenAI
+except ImportError:
+    print("❌ Error: 'openai' package is required", file=sys.stderr)
+    print("   Install it with: pip install openai", file=sys.stderr)
+    sys.exit(1)
 
 # Configuration
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")

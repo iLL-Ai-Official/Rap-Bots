@@ -17,6 +17,10 @@ interface UserClone {
   skillLevel: number;
   style: string;
   voiceId: string | null;
+  avgRhymeDensity: number;
+  avgFlowQuality: number;
+  avgCreativity: number;
+  battlesAnalyzed: number;
 }
 
 export function CharacterSelector({ onCharacterSelect, selectedCharacter }: CharacterSelectorProps) {

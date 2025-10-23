@@ -12,6 +12,11 @@ export interface BattleCharacter {
   avatar?: string;
   isClone?: boolean; // Flag to identify clone characters
   skillLevel?: number; // Clone skill level (0-100)
+  // Additional clone statistics - the "full guts"
+  avgRhymeDensity?: number; // Average rhyme density score
+  avgFlowQuality?: number; // Average flow quality score
+  avgCreativity?: number; // Average creativity score
+  battlesAnalyzed?: number; // Number of battles analyzed to create this clone
 }
 
 export const BATTLE_CHARACTERS: BattleCharacter[] = [
@@ -89,6 +94,10 @@ export const cloneToBattleCharacter = (clone: {
   skillLevel: number;
   style: string;
   voiceId: string | null;
+  avgRhymeDensity: number;
+  avgFlowQuality: number;
+  avgCreativity: number;
+  battlesAnalyzed: number;
 }): BattleCharacter => {
   // Map skill level to difficulty
   let difficulty: 'easy' | 'normal' | 'hard' | 'nightmare' | 'god' = 'normal';
@@ -111,5 +120,10 @@ export const cloneToBattleCharacter = (clone: {
     signature: `I'm your reflection, your shadow in the spotlight`,
     isClone: true,
     skillLevel: clone.skillLevel,
+    // Include the full guts - detailed clone statistics
+    avgRhymeDensity: clone.avgRhymeDensity,
+    avgFlowQuality: clone.avgFlowQuality,
+    avgCreativity: clone.avgCreativity,
+    battlesAnalyzed: clone.battlesAnalyzed,
   };
 };

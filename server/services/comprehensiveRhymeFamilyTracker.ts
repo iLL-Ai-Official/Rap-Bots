@@ -33,17 +33,17 @@ export class ComprehensiveRhymeFamilyTracker {
     const progression = this.battleProgression.get(battleId)!;
 
     // Track family evolution across rounds
-    rhymeResult.families.forEach((family, letter) => {
+    rhymeResult.families.forEach((family: RhymeFamily, letter: string) => {
       if (battleFamilies.has(letter)) {
         // Existing family - track evolution
         const existingFamily = battleFamilies.get(letter)!;
         existingFamily.occurrences += family.occurrences;
-        existingFamily.lines.push(...family.lines.map(line => line + progression.rounds * 1000)); // Offset by rounds
+        existingFamily.lines.push(...family.lines.map((line: number) => line + progression.rounds * 1000)); // Offset by rounds
       } else {
         // New family - track emergence
         battleFamilies.set(letter, {
           ...family,
-          lines: family.lines.map(line => line + progression.rounds * 1000)
+          lines: family.lines.map((line: number) => line + progression.rounds * 1000)
         });
       }
     });
@@ -67,8 +67,10 @@ export class ComprehensiveRhymeFamilyTracker {
     // Clean old battle data (keep last 10 battles)
     if (this.battleRhymeFamilies.size > 10) {
       const oldestBattleId = this.battleRhymeFamilies.keys().next().value;
-      this.battleRhymeFamilies.delete(oldestBattleId);
-      this.battleProgression.delete(oldestBattleId);
+      if (oldestBattleId) {
+        this.battleRhymeFamilies.delete(oldestBattleId);
+        this.battleProgression.delete(oldestBattleId);
+      }
     }
   }
 
@@ -93,8 +95,8 @@ export class ComprehensiveRhymeFamilyTracker {
 
     // Calculate family progression analysis
     const familyProgression: { [familyLetter: string]: number[] } = {};
-    families.forEach((family, letter) => {
-      familyProgression[letter] = family.lines.map(line => Math.floor(line / 1000));
+    families.forEach((family: RhymeFamily, letter: string) => {
+      familyProgression[letter] = family.lines.map((line: number) => Math.floor(line / 1000));
     });
 
     // Calculate diversity score (how diverse the rhyme families are)

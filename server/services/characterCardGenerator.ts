@@ -1,6 +1,26 @@
-import { CharacterCardData, Attack } from "@shared/schema";
 import * as fs from "fs";
 import * as path from "path";
+
+export interface Attack {
+  name: string;
+  power: number;
+  description: string;
+  type: string;
+}
+
+export interface CharacterCardData {
+  name: string;
+  rapStyle: string;
+  bio: string;
+  attacks: Attack[];
+  stats: {
+    flow: number;
+    wordplay: number;
+    delivery: number;
+    stage_presence: number;
+  };
+  generatedAt?: Date;
+}
 
 interface HuggingFaceInpaintRequest {
   inputs: {
@@ -263,7 +283,8 @@ export class CharacterCardGenerator {
         throw new Error(`HF API error: ${response.statusText}`);
       }
 
-      const resultBuffer = await response.buffer();
+      const arrayBuffer = await response.arrayBuffer();
+      const resultBuffer = Buffer.from(arrayBuffer);
       return resultBuffer;
     } catch (error) {
       console.error("Hugging Face inpainting error:", error);

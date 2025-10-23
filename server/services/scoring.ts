@@ -125,7 +125,7 @@ export class ScoringService {
       Math.min(15, diversityRatio * 15);
     
     // 3. ADVANCED WORDPLAY DETECTION enhanced (20 points max) 
-    const wordplayScore = this.detectAdvancedWordplay(text, rhymeAnalysis, isFinalScore);
+    const wordplayScore = this.detectAdvancedWordplay(text);
     
     // 4. METAPHORS & SIMILES (15 points max)
     const figurativeScore = this.detectFigurativeLanguage(text);
@@ -134,7 +134,7 @@ export class ScoringService {
     const punchlineScore = this.detectPunchlines(text);
     
     // 6. HOMONYMS & DOUBLE MEANINGS enhanced (10 points max)
-    const homonymScore = this.detectHomonyms(text, rhymeAnalysis, isFinalScore);
+    const homonymScore = this.detectHomonyms(text);
     
     // 7. RHYTHM & PHONETIC FLOW enhanced (10 points max)
     const rhythmScore = isFinalScore ? 

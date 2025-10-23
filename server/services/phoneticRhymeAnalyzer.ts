@@ -12,7 +12,7 @@ interface PhoneticSyllable {
   families: Set<string>;
 }
 
-interface RhymeFamily {
+export interface RhymeFamily {
   letter: string;
   pattern: string[];
   occurrences: number;
@@ -28,7 +28,7 @@ interface LineAnalysis {
   breakdown: string;
 }
 
-interface RhymeSchemeResult {
+export interface RhymeSchemeResult {
   lines: LineAnalysis[];
   families: Map<string, RhymeFamily>;
   overallScheme: string[];
@@ -285,7 +285,9 @@ export class PhoneticRhymeAnalyzer {
         // Clean old cache entries
         if (this.battleCache.size > 100) {
           const firstKey = this.battleCache.keys().next().value;
-          this.battleCache.delete(firstKey);
+          if (firstKey) {
+            this.battleCache.delete(firstKey);
+          }
         }
       }
 
@@ -737,8 +739,10 @@ export class PhoneticRhymeAnalyzer {
       // Clean up old battle data to prevent memory leaks (keep last 10 battles)
       if (this.battleRhymeFamilies.size > 10) {
         const oldestBattle = this.battleRhymeFamilies.keys().next().value;
-        this.battleRhymeFamilies.delete(oldestBattle);
-        this.battleProgression.delete(oldestBattle);
+        if (oldestBattle) {
+          this.battleRhymeFamilies.delete(oldestBattle);
+          this.battleProgression.delete(oldestBattle);
+        }
       }
 
     } catch (error) {
@@ -813,7 +817,9 @@ export class PhoneticRhymeAnalyzer {
         // Clean old cache entries
         if (this.enhancedCache.size > 50) {
           const firstKey = this.enhancedCache.keys().next().value;
-          this.enhancedCache.delete(firstKey);
+          if (firstKey) {
+            this.enhancedCache.delete(firstKey);
+          }
         }
       }
       

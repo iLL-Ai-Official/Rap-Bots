@@ -33,7 +33,10 @@ export default function AdminPage() {
 
   const { data, isLoading, error } = useQuery<AdminUsersResponse>({
     queryKey: ['admin-users'],
-    queryFn: () => apiRequest('/api/admin/users'),
+    queryFn: async () => {
+      const res = await apiRequest('GET', '/api/admin/users');
+      return res.json();
+    },
     enabled: !!user,
   });
 

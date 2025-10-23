@@ -149,6 +149,11 @@ export const users = pgTable("users", {
   groqApiKey: varchar("groq_api_key"), // User's encrypted Groq API key
   elevenlabsApiKey: varchar("elevenlabs_api_key"), // User's encrypted ElevenLabs API key
   preferredTtsService: varchar("preferred_tts_service").default("elevenlabs"), // "openai", "groq", "elevenlabs", "system"
+  // Profile fields
+  bio: text("bio"), // User bio/description
+  rapStyle: varchar("rap_style"), // User's preferred rap style
+  characterCardUrl: varchar("character_card_url"), // URL to generated character card image
+  characterCardData: jsonb("character_card_data"), // Character card metadata
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [

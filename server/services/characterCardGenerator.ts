@@ -19,6 +19,7 @@ export interface CharacterCardData {
     delivery: number;
     stage_presence: number;
   };
+  generatedAt?: Date;
 }
 
 interface HuggingFaceInpaintRequest {

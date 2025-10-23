@@ -15,6 +15,7 @@ import { FineTuningService } from "./services/fine-tuning";
 import { mlRapperCloningService } from "./services/ml-rapper-cloning";
 import { matchmakingService } from "./services/matchmaking";
 import { realtimeAnalysisService } from "./services/realtime-analysis";
+import { characterCardGenerator } from "./services/characterCardGenerator";
 import multer from "multer";
 import path from "path";
 import fs from "fs";

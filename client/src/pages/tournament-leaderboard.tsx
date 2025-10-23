@@ -1,3 +1,4 @@
+import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,94 @@ export default function TournamentLeaderboard() {
     }
   };
 
+  // Render leaderboard content
+  const renderLeaderboardContent = (): React.ReactNode => {
+    if (isLoading) {
+      return (
+        <div className="space-y-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center space-x-4 p-4 bg-gray-800 rounded-lg animate-pulse">
+              <div className="w-8 h-8 bg-gray-700 rounded-full"></div>
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-gray-700 rounded w-1/3"></div>
+                <div className="h-3 bg-gray-700 rounded w-1/2"></div>
+              </div>
+              <div className="space-y-2">
+                <div className="h-3 bg-gray-700 rounded w-16"></div>
+                <div className="h-3 bg-gray-700 rounded w-12"></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    if (leaderboard && leaderboard.length > 0) {
+      return (
+        <div className="space-y-2">
+          {leaderboard.map((entry) => (
+            <div 
+              key={entry.userId}
+              className={`flex items-center space-x-4 p-4 rounded-lg ${
+                entry.rank <= 3 ? 'bg-gradient-to-r from-gray-800 to-gray-900 border border-gray-600' : 'bg-gray-800'
+              }`}
+            >
+              {/* Rank */}
+              <div className="flex items-center justify-center w-12">
+                <div className={`flex items-center justify-center w-8 h-8 rounded-full ${getRankColor(entry.rank)}`}>
+                  {entry.rank <= 3 ? getRankIcon(entry.rank) : (
+                    <span className="text-white font-bold text-sm">#{entry.rank}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Player Info */}
+              <div className="flex-1">
+                <h3 className="text-white font-semibold">{entry.username}</h3>
+                <div className="flex items-center space-x-4 text-sm text-gray-400">
+                  <span>{entry.tournamentsWon} wins</span>
+                  <span>{entry.tournamentsPlayed} played</span>
+                  <span>{entry.winRate.toFixed(1)}% win rate</span>
+                </div>
+              </div>
+
+              {/* Stats */}
+              <div className="text-right">
+                <div className="text-lg font-bold text-purple-400">
+                  {entry.totalPoints.toLocaleString()} pts
+                </div>
+                <div className="text-sm text-gray-400">
+                  {entry.averageScore.toFixed(1)} avg
+                </div>
+              </div>
+
+              {/* Achievement Badges */}
+              <div className="flex space-x-1">
+                {entry.tournamentsWon >= 10 && (
+                  <Badge className="bg-yellow-500 text-black">Champion</Badge>
+                )}
+                {entry.winRate >= 80 && (
+                  <Badge className="bg-purple-500">Elite</Badge>
+                )}
+                {entry.tournamentsPlayed >= 50 && (
+                  <Badge className="bg-blue-500">Veteran</Badge>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    return (
+      <div className="text-center py-12">
+        <Trophy className="mx-auto mb-4 text-gray-500" size={48} />
+        <p className="text-gray-400">No tournament data yet!</p>
+        <p className="text-sm text-gray-500 mt-2">Complete tournaments to see rankings</p>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-black text-white p-4 relative">
       {/* Leaderboard Background */}
@@ -90,82 +179,7 @@ export default function TournamentLeaderboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <div className="space-y-4">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="flex items-center space-x-4 p-4 bg-gray-800 rounded-lg animate-pulse">
-                    <div className="w-8 h-8 bg-gray-700 rounded-full"></div>
-                    <div className="flex-1 space-y-2">
-                      <div className="h-4 bg-gray-700 rounded w-1/3"></div>
-                      <div className="h-3 bg-gray-700 rounded w-1/2"></div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="h-3 bg-gray-700 rounded w-16"></div>
-                      <div className="h-3 bg-gray-700 rounded w-12"></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : leaderboard && leaderboard.length > 0 ? (
-              <div className="space-y-2">
-                {leaderboard.map((entry) => (
-                  <div 
-                    key={entry.userId}
-                    className={`flex items-center space-x-4 p-4 rounded-lg ${
-                      entry.rank <= 3 ? 'bg-gradient-to-r from-gray-800 to-gray-900 border border-gray-600' : 'bg-gray-800'
-                    }`}
-                  >
-                    {/* Rank */}
-                    <div className="flex items-center justify-center w-12">
-                      <div className={`flex items-center justify-center w-8 h-8 rounded-full ${getRankColor(entry.rank)}`}>
-                        {entry.rank <= 3 ? getRankIcon(entry.rank) : (
-                          <span className="text-white font-bold text-sm">#{entry.rank}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Player Info */}
-                    <div className="flex-1">
-                      <h3 className="text-white font-semibold">{entry.username}</h3>
-                      <div className="flex items-center space-x-4 text-sm text-gray-400">
-                        <span>{entry.tournamentsWon} wins</span>
-                        <span>{entry.tournamentsPlayed} played</span>
-                        <span>{entry.winRate.toFixed(1)}% win rate</span>
-                      </div>
-                    </div>
-
-                    {/* Stats */}
-                    <div className="text-right">
-                      <div className="text-lg font-bold text-purple-400">
-                        {entry.totalPoints.toLocaleString()} pts
-                      </div>
-                      <div className="text-sm text-gray-400">
-                        {entry.averageScore.toFixed(1)} avg
-                      </div>
-                    </div>
-
-                    {/* Achievement Badges */}
-                    <div className="flex space-x-1">
-                      {entry.tournamentsWon >= 10 && (
-                        <Badge className="bg-yellow-500 text-black">Champion</Badge>
-                      )}
-                      {entry.winRate >= 80 && (
-                        <Badge className="bg-purple-500">Elite</Badge>
-                      )}
-                      {entry.tournamentsPlayed >= 50 && (
-                        <Badge className="bg-blue-500">Veteran</Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <Trophy className="mx-auto mb-4 text-gray-500" size={48} />
-                <p className="text-gray-400">No tournament data yet!</p>
-                <p className="text-sm text-gray-500 mt-2">Complete tournaments to see rankings</p>
-              </div>
-            )}
+            {renderLeaderboardContent()}
           </CardContent>
         </Card>
 
@@ -239,7 +253,7 @@ export default function TournamentLeaderboard() {
             );
           }
           return null;
-        })()}
+        })() as React.ReactNode}
       </div>
     </div>
   );

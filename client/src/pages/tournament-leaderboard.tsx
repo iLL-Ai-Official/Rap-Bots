@@ -171,6 +171,7 @@ export default function TournamentLeaderboard() {
         </div>
 
         {/* Leaderboard */}
+        {/* @ts-ignore - Card children type inference issue with query data */}
         <Card className="bg-gray-900 border-gray-700">
           <CardHeader>
             <CardTitle className="text-white flex items-center">
@@ -179,7 +180,7 @@ export default function TournamentLeaderboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {renderLeaderboardContent()}
+            <>{renderLeaderboardContent()}</>
           </CardContent>
         </Card>
 

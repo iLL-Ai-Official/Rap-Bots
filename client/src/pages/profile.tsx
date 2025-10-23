@@ -57,7 +57,7 @@ export default function ProfilePage() {
   
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   
-  const isOwnProfile = params?.userId === currentUser?.id;
+  const isOwnProfile = params?.userId === (currentUser as any)?.id;
   const userId = params?.userId || (currentUser as any)?.id;
 
   useEffect(() => {

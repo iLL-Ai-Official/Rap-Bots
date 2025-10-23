@@ -13,6 +13,8 @@ import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
 import { FineTuningService } from "./services/fine-tuning";
 import { mlRapperCloningService } from "./services/ml-rapper-cloning";
+import { matchmakingService } from "./services/matchmaking";
+import { realtimeAnalysisService } from "./services/realtime-analysis";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -964,13 +966,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put('/api/user/api-keys', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { openaiApiKey, groqApiKey, elevenlabsApiKey, myshellApiKey, preferredTtsService } = req.body;
+      const { openaiApiKey, groqApiKey, elevenlabsApiKey, preferredTtsService } = req.body;
 
       const user = await storage.updateUserAPIKeys(userId, {
         openaiApiKey,
         groqApiKey,
         elevenlabsApiKey,
-        myshellApiKey,
         preferredTtsService
       });
 
@@ -1441,7 +1442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let adjustedComplexity = battle.lyricComplexity || 50;
       let adjustedIntensity = battle.styleIntensity || 50;
 
-      if (isCloneBattle) {
+      if (isCloneBattle && battle.aiCharacterId) {
         console.log(`🤖 Clone battle detected - adjusting AI to match user's skill level`);
         const cloneId = battle.aiCharacterId.replace('clone_', '');
         const clone = await storage.getCloneById(cloneId);
@@ -2350,8 +2351,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Map battles to format expected by ML service
       const battlesData = battles.map(b => ({
-        userVerse: b.rounds?.[0]?.userText || '',
-        aiVerse: b.rounds?.[0]?.aiResponse || ''
+        userVerse: b.rounds?.[0]?.userVerse || '',
+        aiVerse: b.rounds?.[0]?.aiVerse || ''
       })).filter(b => b.userVerse);
 
       const profile = await mlRapperCloningService.createProfileFromHistory(userId, battlesData);

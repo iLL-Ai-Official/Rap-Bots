@@ -17,7 +17,7 @@ export function AdBanner({
   responsive = true,
   className = ''
 }: AdBannerProps) {
-  const adRef = useRef<HTMLDivElement>(null);
+  const adRef = useRef<HTMLModElement>(null);
 
   useEffect(() => {
     // Only load ads if AdSense is available and element exists

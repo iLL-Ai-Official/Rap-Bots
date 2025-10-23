@@ -218,30 +218,28 @@ export default function TournamentLeaderboard() {
         </div>
 
         {/* Social Sharing for User's Rank */}
-        {user && leaderboard && (
-          <div className="mt-8">
-            {(() => {
-              const userEntry = leaderboard.find(entry => entry.userId === (user as any).id);
-              if (userEntry) {
-                return (
-                  <SocialShare
-                    title="Rap Battle AI Tournament Leaderboard"
-                    text={`🏆 Ranking #${userEntry.rank} on the Rap Battle AI leaderboard! ${userEntry.totalPoints.toLocaleString()} points earned through epic AI battles! Think you can climb higher?`}
-                    hashtags={['RapBattleAI', 'Leaderboard', 'Ranked', 'TournamentChampion']}
-                    leaderboardData={{
-                      rank: userEntry.rank,
-                      username: userEntry.username,
-                      score: userEntry.totalPoints
-                    }}
-                    variant="default"
-                    className="mb-6"
-                  />
-                );
-              }
-              return null;
-            })()}
-          </div>
-        )}
+        {user && leaderboard && (() => {
+          const userEntry = leaderboard.find(entry => entry.userId === (user as any).id);
+          if (userEntry) {
+            return (
+              <div className="mt-8">
+                <SocialShare
+                  title="Rap Battle AI Tournament Leaderboard"
+                  text={`🏆 Ranking #${userEntry.rank} on the Rap Battle AI leaderboard! ${userEntry.totalPoints.toLocaleString()} points earned through epic AI battles! Think you can climb higher?`}
+                  hashtags={['RapBattleAI', 'Leaderboard', 'Ranked', 'TournamentChampion']}
+                  leaderboardData={{
+                    rank: userEntry.rank,
+                    username: userEntry.username,
+                    score: userEntry.totalPoints
+                  }}
+                  variant="default"
+                  className="mb-6"
+                />
+              </div>
+            );
+          }
+          return null;
+        })()}
       </div>
     </div>
   );

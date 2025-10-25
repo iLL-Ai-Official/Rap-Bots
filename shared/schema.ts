@@ -144,6 +144,10 @@ export const users = pgTable("users", {
   referredBy: varchar("referred_by"), // Who referred this user
   totalBattles: integer("total_battles").default(0),
   totalWins: integer("total_wins").default(0),
+  // Password authentication fields
+  passwordHash: varchar("password_hash"), // Hashed password for email/password auth
+  passwordResetToken: varchar("password_reset_token"), // Token for password reset
+  passwordResetExpires: timestamp("password_reset_expires"), // When reset token expires
   // User-managed API keys for enhanced TTS services
   openaiApiKey: varchar("openai_api_key"), // User's encrypted OpenAI API key
   groqApiKey: varchar("groq_api_key"), // User's encrypted Groq API key

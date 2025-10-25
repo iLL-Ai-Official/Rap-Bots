@@ -80,17 +80,17 @@ export default function Landing() {
           </div>
           
           <div className="flex gap-4 justify-center mb-12">
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               className="bg-purple-600 hover:bg-purple-700 text-white px-8 py-4 text-lg"
-              onClick={() => window.location.href = '/api/login'}
+              onClick={() => window.location.href = '/login'}
             >
               <Mic className="mr-2 h-5 w-5" />
               Start Battling
             </Button>
-            <Button 
-              size="lg" 
-              variant="outline" 
+            <Button
+              size="lg"
+              variant="outline"
               className="border-purple-400 text-purple-400 hover:bg-purple-400 hover:text-white px-8 py-4 text-lg"
               onClick={() => window.location.href = '/tournaments'}
             >
@@ -216,7 +216,7 @@ export default function Landing() {
               </ul>
               <Button 
                 className="w-full mt-6 bg-gray-600 hover:bg-gray-700"
-                onClick={() => window.location.href = '/api/login'}
+                onClick={() => window.location.href = '/login'}
               >
                 Start Free
               </Button>
@@ -247,7 +247,7 @@ export default function Landing() {
               </ul>
               <Button 
                 className="w-full mt-6 bg-yellow-500 hover:bg-yellow-600 text-black font-semibold"
-                onClick={() => window.location.href = '/api/login'}
+                onClick={() => window.location.href = '/login'}
               >
                 Upgrade to Premium
               </Button>
@@ -277,7 +277,7 @@ export default function Landing() {
               </ul>
               <Button 
                 className="w-full mt-6 bg-amber-500 hover:bg-amber-600 text-black font-semibold"
-                onClick={() => window.location.href = '/api/login'}
+                onClick={() => window.location.href = '/login'}
               >
                 Go Pro
               </Button>

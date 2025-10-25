@@ -35,7 +35,7 @@
 
 *Note: Server startup requires DATABASE_URL environment variable to be set for full testing*
 
-## Frontend Updates (Future)
-- [ ] Add auth method selection UI
-- [ ] Update login/register forms
-- [ ] Add password reset UI
+## Frontend Updates (Completed)
+- [x] Add auth method selection UI
+- [x] Update login/register forms
+- [x] Add password reset UI

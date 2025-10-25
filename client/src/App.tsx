@@ -9,6 +9,9 @@ import { ErrorBoundary } from "@/components/error-boundary";
 import { InstallPrompt } from "@/components/install-prompt";
 import { AudioAutoplayGate } from "@/components/AudioAutoplayGate";
 import Landing from "@/pages/Landing";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
+import ForgotPassword from "@/pages/ForgotPassword";
 import Home from "@/pages/Home";
 import Subscribe from "@/pages/Subscribe";
 import BattleArena from "@/pages/battle-arena";
@@ -42,7 +45,12 @@ function Router() {
   return (
     <Switch>
       {!isAuthenticated ? (
-        <Route path="/" component={Landing} />
+        <>
+          <Route path="/" component={Landing} />
+          <Route path="/login" component={Login} />
+          <Route path="/register" component={Register} />
+          <Route path="/forgot-password" component={ForgotPassword} />
+        </>
       ) : (
         <>
           <Route path="/" component={Home} />

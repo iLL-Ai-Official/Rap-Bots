@@ -29,6 +29,8 @@ import {
 import { db, withRetry } from "./db";
 import { eq, and, gte, lt, sql, desc, count, max } from "drizzle-orm";
 import NodeCache from 'node-cache';
+import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 
 // Initialize cache with 10 minute TTL and 5 minute check period
 const cache = new NodeCache({ stdTTL: 600, checkperiod: 300 });
@@ -102,6 +104,21 @@ export interface IStorage {
   getUserClone(userId: string): Promise<UserClone | undefined>;
   createOrUpdateUserClone(userId: string): Promise<UserClone>;
   getCloneById(cloneId: string): Promise<UserClone | undefined>;
+
+  // Password authentication operations
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createPasswordUser(userData: {
+    email: string;
+    password: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<User>;
+  hashPassword(password: string): Promise<string>;
+  verifyPassword(password: string, hash: string): Promise<boolean>;
+  generatePasswordResetToken(): string;
+  setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void>;
+  getUserByPasswordResetToken(token: string): Promise<User | undefined>;
+  updatePassword(userId: string, newPassword: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -862,12 +879,132 @@ export class DatabaseStorage implements IStorage {
         .from(userClones)
         .where(eq(userClones.id, cloneId))
         .limit(1);
-      
+
       return clone;
     } catch (error) {
       console.error('Error fetching clone by ID:', error);
       throw error;
     }
+  }
+
+  // Password authentication methods
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.email, email))
+        .limit(1);
+
+      return user;
+    } catch (error) {
+      console.error('Error finding user by email:', error);
+      throw error;
+    }
+  }
+
+  async createPasswordUser(userData: {
+    email: string;
+    password: string;
+    firstName?: string;
+    lastName?: string;
+  }): Promise<User> {
+    return withRetry(
+      async () => {
+        // Check if user already exists
+        const existingUser = await this.getUserByEmail(userData.email);
+        if (existingUser) {
+          throw new Error('User with this email already exists');
+        }
+
+        // Hash the password
+        const hashedPassword = await this.hashPassword(userData.password);
+
+        // Generate unique ID and referral code
+        const userId = crypto.randomUUID();
+        const referralCode = crypto.randomBytes(6).toString('hex').toUpperCase();
+
+        const [user] = await db
+          .insert(users)
+          .values({
+            id: userId,
+            email: userData.email,
+            passwordHash: hashedPassword,
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            referralCode,
+            subscriptionTier: "free",
+            subscriptionStatus: "free",
+            battlesRemaining: 3,
+            lastBattleReset: new Date(),
+            totalBattles: 0,
+            totalWins: 0,
+          })
+          .returning();
+
+        return user;
+      },
+      { maxAttempts: 3 },
+      `createPasswordUser for ${userData.email}`
+    );
+  }
+
+  async hashPassword(password: string): Promise<string> {
+    const saltRounds = 12;
+    return bcrypt.hash(password, saltRounds);
+  }
+
+  async verifyPassword(password: string, hash: string): Promise<boolean> {
+    return bcrypt.compare(password, hash);
+  }
+
+  generatePasswordResetToken(): string {
+    return crypto.randomBytes(32).toString('hex');
+  }
+
+  async setPasswordResetToken(userId: string, token: string, expiresAt: Date): Promise<void> {
+    await db
+      .update(users)
+      .set({
+        passwordResetToken: token,
+        passwordResetExpires: expiresAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+  }
+
+  async getUserByPasswordResetToken(token: string): Promise<User | undefined> {
+    try {
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(
+          and(
+            eq(users.passwordResetToken, token),
+            gte(users.passwordResetExpires, new Date())
+          )
+        )
+        .limit(1);
+
+      return user;
+    } catch (error) {
+      console.error('Error finding user by password reset token:', error);
+      throw error;
+    }
+  }
+
+  async updatePassword(userId: string, newPassword: string): Promise<void> {
+    const hashedPassword = await this.hashPassword(newPassword);
+
+    await db
+      .update(users)
+      .set({
+        passwordHash: hashedPassword,
+        passwordResetToken: null,
+        passwordResetExpires: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
   }
 }
 

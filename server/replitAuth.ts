@@ -8,14 +8,7 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { storage } from "./storage";
 
-if (!process.env.REPLIT_DOMAINS) {
-  if (process.env.NODE_ENV === 'production') {
-    console.error("❌ REPLIT_DOMAINS missing in production - authentication will fail");
-    console.error("💡 Add REPLIT_DOMAINS to your deployment environment variables");
-  } else {
-    throw new Error("Environment variable REPLIT_DOMAINS not provided");
-  }
-}
+// Removed REPLIT_DOMAINS check for local development
 
 const getOidcConfig = memoize(
   async () => {
@@ -72,13 +65,21 @@ async function upsertUser(
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
     subscriptionTier: "free",
-    subscriptionStatus: "free", 
+    subscriptionStatus: "free",
     battlesRemaining: 3,
     lastBattleReset: new Date(),
   });
 }
 
 export async function setupAuth(app: Express) {
+  // Skip authentication setup if REPL_ID is not provided (local development)
+  if (!process.env.REPL_ID) {
+    console.log('⚠️ REPL_ID not provided - authentication disabled for local development');
+    app.set("trust proxy", 1);
+    app.use(getSession());
+    return;
+  }
+
   app.set("trust proxy", 1);
   app.use(getSession());
   app.use(passport.initialize());
@@ -96,8 +97,12 @@ export async function setupAuth(app: Express) {
     verified(null, user);
   };
 
-  for (const domain of process.env
-    .REPLIT_DOMAINS!.split(",")) {
+  // Clean up REPLIT_DOMAINS: trim whitespace and drop empty entries
+  const domains = process.env.REPLIT_DOMAINS!
+    .split(",")
+    .map((d) => d.trim())
+    .filter((d) => d.length > 0);
+  for (const domain of domains) {
     const strategy = new Strategy(
       {
         name: `replitauth:${domain}`,
@@ -140,7 +145,18 @@ export async function setupAuth(app: Express) {
 }
 
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
+  // If REPL_ID is not set, skip authentication for local development
+  if (!process.env.REPL_ID) {
+    console.log('⚠️ Authentication disabled for local development');
+    return next();
+  }
+
   try {
+    if (typeof req.isAuthenticated !== 'function') {
+      console.log('Passport not initialized');
+      return res.status(401).json({ message: "Authentication not configured" });
+    }
+
     if (!req.isAuthenticated()) {
       console.log('User not authenticated via Passport');
       return res.status(401).json({ message: "Unauthorized" });
@@ -171,7 +187,7 @@ export const isAuthenticated: RequestHandler = async (req, res, next) => {
     const now = Math.floor(Date.now() / 1000);
     const expiresAt = user.expires_at || user.claims?.exp;
     const bufferTime = 300; // 5 minute buffer
-    
+
     if (!expiresAt || now <= (expiresAt + bufferTime)) {
       return next();
     }

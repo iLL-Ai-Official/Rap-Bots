@@ -96,18 +96,27 @@ export async function setupAuth(app: Express) {
     verified(null, user);
   };
 
-  for (const domain of process.env
-    .REPLIT_DOMAINS!.split(",")) {
+  // Register strategies for all Replit domains
+  const domains = process.env.REPLIT_DOMAINS!.split(",");
+  
+  // In development, also register localhost
+  if (process.env.NODE_ENV === 'development') {
+    domains.push('localhost:5000', '127.0.0.1:5000', 'localhost', '127.0.0.1');
+  }
+
+  for (const domain of domains) {
+    const protocol = domain.includes('localhost') || domain.includes('127.0.0.1') ? 'http' : 'https';
     const strategy = new Strategy(
       {
         name: `replitauth:${domain}`,
         config,
         scope: "openid email profile offline_access",
-        callbackURL: `https://${domain}/api/callback`,
+        callbackURL: `${protocol}://${domain}/api/callback`,
       },
       verify,
     );
     passport.use(strategy);
+    console.log(`✅ Registered auth strategy: replitauth:${domain}`);
   }
 
   passport.serializeUser((user: Express.User, cb) => cb(null, user));

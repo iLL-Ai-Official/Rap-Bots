@@ -1406,7 +1406,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/tournaments', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { name, type, totalRounds, difficulty, profanityFilter, lyricComplexity, styleIntensity, prize } = req.body;
+      const { 
+        name, 
+        type, 
+        totalRounds, 
+        difficulty, 
+        profanityFilter, 
+        lyricComplexity, 
+        styleIntensity, 
+        prize,
+        entryFeeUSDC,
+        organizerPercentage,
+        maxParticipants
+      } = req.body;
+
+      // If tournament has entry fee, check Arc wallet balance BEFORE creation
+      let arcWallet = null;
+      if (entryFeeUSDC && parseFloat(entryFeeUSDC) > 0) {
+        // Get user's Arc wallet
+        arcWallet = await storage.getArcWallet(userId);
+        if (!arcWallet) {
+          return res.status(400).json({ message: 'Arc wallet not found. Please create an Arc wallet first.' });
+        }
+
+        // Check wallet balance (but don't charge yet!)
+        const balance = await arcService.getUSDCBalance(arcWallet.walletAddress);
+        if (parseFloat(balance) < parseFloat(entryFeeUSDC)) {
+          return res.status(400).json({ 
+            message: `Insufficient USDC balance. You have ${balance} USDC but need ${entryFeeUSDC} USDC for entry fee.` 
+          });
+        }
+      }
 
       // Generate tournament bracket based on type and rounds
       const generateBracket = (rounds: number, tournamentType: string) => {
@@ -1454,13 +1484,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
         styleIntensity: styleIntensity || 50,
         prize: prize || 'Tournament Champion Title',
         opponents: ['razor', 'venom', 'silk'], // Default opponents
-        bracket: generateBracket(totalRounds || 3, type || 'single_elimination')
+        bracket: generateBracket(totalRounds || 3, type || 'single_elimination'),
+        // Entry fee and prize pool
+        entryFeeUSDC: entryFeeUSDC || '0',
+        prizePoolUSDC: entryFeeUSDC || '0', // Initial prize pool = creator's entry fee
+        organizerPercentage: organizerPercentage || 10,
+        maxParticipants: maxParticipants || null,
       };
 
       // Validate tournament data
       const validatedData = insertTournamentSchema.parse(tournamentData);
 
       const tournament = await storage.createTournament(validatedData);
+      
+      console.log(`🏆 Tournament created: ${tournament.name} (ID: ${tournament.id})`);
+
+      // NOW process entry fee payment AFTER successful tournament creation
+      if (entryFeeUSDC && parseFloat(entryFeeUSDC) > 0 && arcWallet) {
+        const platformWallet = process.env.ARC_PLATFORM_WALLET || "0x0000000000000000000000000000000000000000";
+        
+        // Transfer USDC from player to platform escrow
+        const entryFeeTx = await arcService.transferUSDC({
+          fromAddress: arcWallet.walletAddress,
+          toAddress: platformWallet,
+          amountUSDC: entryFeeUSDC,
+          memo: `Tournament Entry Fee - ${tournament.name} (ID: ${tournament.id})`,
+        });
+
+        console.log(`💰 Tournament entry fee processed: ${entryFeeUSDC} USDC (tx: ${entryFeeTx.txHash})`);
+
+        // Record Arc transaction with REAL tournament ID
+        await storage.recordArcTransaction({
+          userId,
+          type: 'tournament_entry',
+          amount: entryFeeUSDC,
+          txHash: entryFeeTx.txHash,
+          status: entryFeeTx.status,
+          fromAddress: arcWallet.walletAddress,
+          toAddress: platformWallet,
+          battleId: null,
+        });
+
+        console.log(`💰 Entry fee: ${tournament.entryFeeUSDC} USDC | Prize pool: ${tournament.prizePoolUSDC} USDC`);
+        console.log(`📊 Organizer cut: ${tournament.organizerPercentage}% | Max participants: ${tournament.maxParticipants || 'unlimited'}`);
+      }
+
       res.json(tournament);
     } catch (error: any) {
       console.error('Error creating tournament:', error);
@@ -1511,6 +1579,134 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Error starting tournament battle:', error);
       res.status(500).json({ message: 'Failed to start tournament battle', error: error.message });
+    }
+  });
+
+  // Complete tournament and distribute prizes (USDC on Arc blockchain)
+  app.post('/api/tournaments/:id/complete', isAuthenticated, async (req: any, res) => {
+    try {
+      const { id: tournamentId } = req.params;
+      const userId = req.user.claims.sub;
+
+      const tournament = await storage.getTournament(tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ message: 'Tournament not found' });
+      }
+
+      // Verify user is the tournament organizer
+      if (tournament.userId !== userId) {
+        return res.status(403).json({ message: 'Only the tournament organizer can complete the tournament' });
+      }
+
+      // Verify tournament is in a completable state
+      if (tournament.status === 'completed') {
+        return res.status(400).json({ message: 'Tournament is already completed' });
+      }
+
+      // Check if all matches are completed
+      const allMatchesComplete = tournament.bracket.rounds.every(round => 
+        round.matches.every(match => match.isCompleted)
+      );
+
+      if (!allMatchesComplete) {
+        return res.status(400).json({ message: 'Cannot complete tournament - not all matches are finished' });
+      }
+
+      // Determine winners from the final round
+      const finalRound = tournament.bracket.rounds[tournament.bracket.rounds.length - 1];
+      const winners = finalRound.matches
+        .filter(match => match.winner)
+        .map((match, index) => ({
+          match,
+          place: index === 0 ? '1st' : index === 1 ? '2nd' : '3rd'
+        }));
+
+      console.log(`🏆 Completing tournament ${tournament.name} with ${winners.length} winners`);
+
+      // Distribute prizes if tournament has entry fee
+      const prizeDistributions: any[] = [];
+      if (tournament.entryFeeUSDC && parseFloat(tournament.entryFeeUSDC) > 0 && tournament.prizePoolUSDC) {
+        const arcService = createArcBlockchainService({ 
+          demoMode: process.env.ARC_DEMO_MODE === 'true' 
+        });
+
+        // Get organizer's Arc wallet
+        const organizerWallet = await storage.getArcWallet(tournament.userId);
+        if (!organizerWallet) {
+          return res.status(400).json({ message: 'Organizer Arc wallet not found' });
+        }
+
+        // Prepare winners for prize distribution
+        const winnerPayouts = [];
+        
+        // 1st place gets 50%, 2nd gets 30%, 3rd gets 20% of winners' pool
+        const prizePercentages = [50, 30, 20];
+        
+        for (let i = 0; i < Math.min(winners.length, 3); i++) {
+          const winner = winners[i];
+          if (winner.match.winner?.type === 'user') {
+            // Get winner's Arc wallet
+            const winnerWallet = await storage.getArcWallet(winner.match.winner.id);
+            if (winnerWallet) {
+              winnerPayouts.push({
+                address: winnerWallet.walletAddress,
+                percentage: prizePercentages[i],
+                place: winner.place,
+              });
+            }
+          }
+        }
+
+        // Distribute prizes using Arc blockchain
+        const txResults = await arcService.distributeTournamentPrizes(
+          tournament.id,
+          tournament.prizePoolUSDC,
+          tournament.organizerPercentage || 10,
+          organizerWallet.walletAddress,
+          winnerPayouts
+        );
+
+        // Record all Arc transactions
+        for (const tx of txResults) {
+          const isOrganizerTx = tx === txResults[0]; // First tx is organizer fee
+          const winnerIndex = isOrganizerTx ? -1 : txResults.indexOf(tx) - 1;
+          
+          await storage.recordArcTransaction({
+            userId: isOrganizerTx ? tournament.userId : winnerPayouts[winnerIndex]?.address || userId,
+            type: isOrganizerTx ? 'tournament_organizer_fee' : 'tournament_prize',
+            amount: tx.status === 'confirmed' ? '0' : '0', // Amount is in the tx metadata
+            txHash: tx.txHash,
+            status: tx.status,
+            fromAddress: process.env.ARC_PLATFORM_WALLET || "0x0000000000000000000000000000000000000000",
+            toAddress: isOrganizerTx ? organizerWallet.walletAddress : (winnerPayouts[winnerIndex]?.address || ''),
+            battleId: null,
+          });
+
+          prizeDistributions.push({
+            txHash: tx.txHash,
+            recipient: isOrganizerTx ? 'organizer' : winnerPayouts[winnerIndex]?.place || 'winner',
+            status: tx.status,
+          });
+        }
+
+        console.log(`💰 Distributed ${tournament.prizePoolUSDC} USDC in tournament prizes (${txResults.length} transactions)`);
+      }
+
+      // Update tournament status to completed
+      const completedTournament = await storage.updateTournament(tournament.id, {
+        status: 'completed',
+        completedAt: new Date(),
+      });
+
+      res.json({
+        message: 'Tournament completed successfully',
+        tournament: completedTournament,
+        prizeDistributions,
+      });
+
+    } catch (error: any) {
+      console.error('Error completing tournament:', error);
+      res.status(500).json({ message: 'Failed to complete tournament', error: error.message });
     }
   });
 

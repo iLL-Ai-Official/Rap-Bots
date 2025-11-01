@@ -261,6 +261,12 @@ export const tournaments = pgTable("tournaments", {
   prize: varchar("prize"), // What player gets for winning
   opponents: jsonb("opponents").$type<string[]>().notNull().default([]), // Array of character IDs
   bracket: jsonb("bracket").$type<TournamentBracket>().notNull(),
+  // Entry fee and prize pool (USDC on Arc blockchain)
+  entryFeeUSDC: varchar("entry_fee_usdc").default("0"), // Entry fee in USDC (e.g., "5.00")
+  prizePoolUSDC: varchar("prize_pool_usdc").default("0"), // Total prize pool in USDC
+  organizerPercentage: integer("organizer_percentage").default(10), // Percentage for organizer (default 10%)
+  maxParticipants: integer("max_participants"), // Max number of participants
+  currentParticipants: integer("current_participants").notNull().default(1), // Current participant count (creator counts as 1)
   createdAt: timestamp("created_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),
 });
@@ -317,7 +323,12 @@ export const insertTournamentSchema = createInsertSchema(tournaments).omit({
   id: true,
   createdAt: true,
   completedAt: true,
+  currentParticipants: true, // Auto-calculated
+  prizePoolUSDC: true, // Auto-calculated from entry fees
 }).extend({
+  entryFeeUSDC: z.string().optional(), // Entry fee in USDC (e.g., "5.00")
+  organizerPercentage: z.number().min(0).max(50).optional(), // 0-50% for organizer
+  maxParticipants: z.number().min(2).max(64).optional(), // 2-64 participants
   bracket: z.object({
     rounds: z.array(z.object({
       roundNumber: z.number(),

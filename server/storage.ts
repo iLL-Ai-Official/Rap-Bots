@@ -100,7 +100,7 @@ export interface IStorage {
 
   // User Clone operations
   getUserClone(userId: string): Promise<UserClone | undefined>;
-  createOrUpdateUserClone(userId: string): Promise<UserClone>;
+  createOrUpdateUserClone(userId: string, battlesLimit?: number): Promise<UserClone>;
   getCloneById(cloneId: string): Promise<UserClone | undefined>;
 }
 
@@ -744,11 +744,12 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async createOrUpdateUserClone(userId: string): Promise<UserClone> {
+  async createOrUpdateUserClone(userId: string, battlesLimit: number = 10): Promise<UserClone> {
     return withRetry(
       async () => {
         // Get user's battle history to analyze performance
-        const userBattles = await this.getUserBattles(userId, 10); // Last 10 battles
+        // Support analyzing more battles for better accuracy: 10, 25, 50, or all (9999)
+        const userBattles = await this.getUserBattles(userId, battlesLimit);
         
         if (userBattles.length === 0) {
           // No battles yet - create default clone

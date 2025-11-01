@@ -2,11 +2,25 @@ import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { APIKeyManager } from '@/components/api-key-manager';
 import { Settings2, Mic, Key, Shield } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Link } from 'wouter';
 const settingsImage = "/images/Audio_settings_interface_5e678558.png";
 
 export default function SettingsPage() {
+  // Fetch Arc wallet data
+  const { data: arcWallet, isLoading: arcWalletLoading } = useQuery<any>({
+    queryKey: ['/api/arc/wallet'],
+  });
+
+  // Helper function to truncate wallet address
+  const truncateAddress = (address: string) => {
+    if (!address) return '';
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4 relative" data-testid="page-settings">
       {/* Settings Background */}
@@ -160,6 +174,61 @@ export default function SettingsPage() {
 
           {/* Account Tab */}
           <TabsContent value="account" className="space-y-6">
+            {/* Arc Blockchain Wallet Card */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-white flex items-center gap-2">
+                    ⛓️ Arc Blockchain Wallet
+                  </CardTitle>
+                  <Badge variant="secondary" className="bg-green-600">Demo Mode</Badge>
+                </div>
+                <CardDescription className="text-gray-300">
+                  Earn USDC rewards on Circle's Arc L1 blockchain
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {arcWalletLoading ? (
+                  <div className="text-center py-4">
+                    <div className="animate-spin w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full mx-auto"></div>
+                    <p className="text-sm text-gray-400 mt-2">Loading wallet...</p>
+                  </div>
+                ) : arcWallet ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-white font-medium">Wallet Address</h4>
+                        <p className="text-sm text-gray-400 font-mono" data-testid="text-arc-wallet-address">
+                          {truncateAddress(arcWallet.walletAddress)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <h4 className="text-white font-medium">Balance</h4>
+                        <p className="text-lg text-green-400 font-semibold" data-testid="text-arc-wallet-balance">
+                          ${arcWallet.usdcBalance || '0.00'}
+                        </p>
+                      </div>
+                    </div>
+                    
+                    <div className="pt-4 border-t border-gray-700">
+                      <Link href="/wallet">
+                        <Button 
+                          className="w-full bg-purple-600 hover:bg-purple-700" 
+                          data-testid="button-view-arc-wallet"
+                        >
+                          View Full Wallet Dashboard
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-gray-400">No Arc wallet found</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <Card className="bg-gray-800 border-gray-700">
               <CardHeader>
                 <CardTitle className="text-white">Account Information</CardTitle>

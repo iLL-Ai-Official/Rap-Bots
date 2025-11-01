@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Mic, Trophy, Clock, Flame, Wifi, History, Share, Dumbbell, User, BarChart3 } from "lucide-react";
 import { CharacterSelector } from "@/components/character-selector";
 import type { BattleCharacter } from "@shared/characters";
@@ -20,6 +20,7 @@ import { SimpleAnalyzer } from "@/components/simple-analyzer";
 import { formatDuration } from "@/lib/audio-utils";
 import { preventMobileOverscroll, applyMobileScrollClasses } from "@/lib/mobile-scroll-prevention";
 import { motion, AnimatePresence } from "framer-motion";
+import { queryClient } from "@/lib/queryClient";
 const battleArenaImage = "/images/Epic_rap_battle_arena_5a01b4d4.png";
 
 export default function BattleArena() {
@@ -152,6 +153,36 @@ export default function BattleArena() {
     queryKey: ["/api/battles"],
   });
 
+  // Fetch Arc wallet data
+  const { data: arcWallet } = useQuery<any>({
+    queryKey: ['/api/arc/wallet'],
+  });
+
+  // Arc battle reward mutation
+  const arcBattleRewardMutation = useMutation({
+    mutationFn: async (battleId: string) => {
+      const response = await fetch('/api/arc/award-battle-win', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ battleId }),
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        throw new Error('Failed to award battle USDC');
+      }
+      return await response.json();
+    },
+    onSuccess: (data) => {
+      console.log('🏆 Arc USDC reward awarded:', data);
+      queryClient.invalidateQueries({ queryKey: ['/api/arc/wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/arc/transactions', { limit: 20 }] });
+      queryClient.invalidateQueries({ queryKey: ['/api/arc/voice-commands', { limit: 20 }] });
+    },
+    onError: (error) => {
+      console.error('❌ Failed to award Arc USDC:', error);
+    },
+  });
+
   // Battle timer countdown
   useEffect(() => {
     if (battleState?.timeRemaining && battleState.timeRemaining > 0) {
@@ -164,6 +195,26 @@ export default function BattleArena() {
           const userWon = (battleState?.userScore || 0) > (battleState?.aiScore || 0);
           playEndingEffect(userWon ? 'victory' : 'defeat');
           
+          // 🏆 Award Arc USDC for battle win
+          if (userWon && currentBattleId) {
+            console.log('🏆 User won! Awarding Arc USDC reward...');
+            arcBattleRewardMutation.mutate(currentBattleId);
+            
+            // Show victory toast with USDC reward
+            toast({
+              title: "🎉 Victory!",
+              description: `You won the battle! +$0.10 USDC on Arc blockchain`,
+              duration: 5000,
+            });
+          } else if (!userWon) {
+            // Show defeat toast
+            toast({
+              title: "💪 Keep Training!",
+              description: `AI won this round. Practice makes perfect!`,
+              duration: 5000,
+            });
+          }
+          
           // Disable real-time crowd reactions
           enableRealtimeCrowdReactions(false);
           
@@ -174,7 +225,7 @@ export default function BattleArena() {
 
       return () => clearInterval(timer);
     }
-  }, [battleState?.timeRemaining, updateBattleState]);
+  }, [battleState?.timeRemaining, updateBattleState, currentBattleId, arcBattleRewardMutation, toast]);
 
   // Initialize mobile scroll prevention
   useEffect(() => {
@@ -530,6 +581,16 @@ export default function BattleArena() {
                 {battleState?.userScore || 0}
               </span>
             </div>
+            {/* Arc USDC Balance */}
+            {arcWallet && (
+              <div className="text-sm text-gray-400 flex items-center gap-1" data-testid="text-arc-balance">
+                <span>⛓️</span>
+                <span className="text-green-400 font-semibold">
+                  ${arcWallet.usdcBalance || '0.00'}
+                </span>
+                <span className="text-xs">USDC</span>
+              </div>
+            )}
             <Button 
               variant="outline" 
               size="sm"

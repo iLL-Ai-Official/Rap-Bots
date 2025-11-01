@@ -2,9 +2,9 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { BATTLE_CHARACTERS, type BattleCharacter, cloneToBattleCharacter } from "@shared/characters";
+import { BATTLE_CHARACTERS, type BattleCharacter, cloneToBattleCharacter, getRandomCharacter } from "@shared/characters";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, Sparkles } from "lucide-react";
+import { Bot, Sparkles, Shuffle } from "lucide-react";
 
 interface CharacterSelectorProps {
   onCharacterSelect: (character: BattleCharacter) => void;
@@ -39,9 +39,26 @@ export function CharacterSelector({ onCharacterSelect, selectedCharacter }: Char
     }
   }, [userClone]);
 
+  const handleRandomOpponent = () => {
+    const randomChar = getRandomCharacter(selectedCharacter?.id);
+    onCharacterSelect(randomChar);
+  };
+
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold text-white mb-4">Choose Your Opponent</h3>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-white">Choose Your Opponent</h3>
+        <Button
+          onClick={handleRandomOpponent}
+          variant="outline"
+          size="sm"
+          className="border-purple-500 text-purple-400 hover:bg-purple-500 hover:text-white"
+          data-testid="button-random-opponent"
+        >
+          <Shuffle className="h-4 w-4 mr-2" />
+          Random Match
+        </Button>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {allCharacters.map((character) => (
           <Card

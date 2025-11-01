@@ -1227,7 +1227,7 @@ export default function BattleArena() {
                       🎬 Generate Battle Video
                     </h3>
                     <p className="text-sm text-gray-300 mb-4">
-                      Create a cinematic AI-generated video of your battle round using Sora 2 Pro
+                      Create a cinematic AI-generated video of your battle round using Sora 2
                     </p>
                     <div className="space-y-2">
                       <div className="flex justify-between text-sm">
@@ -1236,7 +1236,11 @@ export default function BattleArena() {
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-400">Duration:</span>
-                        <span className="text-gray-300">8 seconds, 1080p</span>
+                        <span className="text-gray-300">8 seconds, 720p HD</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">API Limit:</span>
+                        <span className="text-yellow-400 font-bold">10/hour (Free tier)</span>
                       </div>
                     </div>
                     <Button

@@ -1,7 +1,7 @@
 import type { Battle, BattleRound } from "@shared/schema";
 
 interface SoraVideoGenerationRequest {
-  model: string;
+  model: 'openai/sora-2-i2v'; // Free tier model (10 requests/hour)
   image_url: string;
   prompt: string;
   duration: number;
@@ -28,8 +28,9 @@ export class SoraVideoService {
   }
 
   /**
-   * Generate a battle round video using Sora 2 Pro
-   * Cost: 50 credits per video generation
+   * Generate a battle round video using Sora 2 i2v (FREE tier - 10 requests/hour)
+   * Cost: 50 credits per video generation (for user-side rate limiting and value)
+   * Note: API itself is free with 10 requests/hour limit
    */
   async generateBattleVideo(
     battleId: string,
@@ -46,12 +47,12 @@ export class SoraVideoService {
     const prompt = this.createBattlePrompt(userVerse, aiVerse, roundNumber);
 
     const request: SoraVideoGenerationRequest = {
-      model: 'openai/sora-2-pro-i2v',
+      model: 'openai/sora-2-i2v', // Using free i2v model (10 req/hour)
       image_url: characterImageUrl,
       prompt,
       duration: 8, // 8 seconds for battle round
       aspect_ratio: '16:9',
-      resolution: '1080p'
+      resolution: '720p' // Free tier supports 720p
     };
 
     const response = await fetch(this.baseUrl, {
@@ -65,15 +66,19 @@ export class SoraVideoService {
 
     if (!response.ok) {
       const error = await response.text();
+      // Check if rate limit exceeded
+      if (response.status === 429) {
+        throw new Error('Video generation rate limit exceeded. Free tier allows 10 videos per hour. Please try again later.');
+      }
       throw new Error(`Sora video generation failed: ${error}`);
     }
 
     const data = await response.json();
-    console.log('🎬 Sora video generation started:', data.id);
+    console.log('🎬 Sora video generation started (FREE tier):', data.id);
 
     return {
       generationId: data.id,
-      cost: 50 // 50 credits per video
+      cost: 50 // Still charge 50 credits for value and abuse prevention
     };
   }
 

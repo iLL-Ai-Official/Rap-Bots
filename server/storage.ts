@@ -628,1314 +628,1325 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateBattleRound(battleId: number, roundNumber: number, updates: Partial<InsertBattleRound>): Promise<void> {
-    // Tournament operations
-    async createTournament(tournament: InsertTournament): Promise<Tournament> {
-      const { getRandomCharacter } = await import("@shared/characters");
-      const numOpponents = Math.pow(2, tournament.totalRounds) - 1;
-      const opponents: string[] = [];
-
-      for (let i = 0; i < numOpponents; i++) {
-        const character = getRandomCharacter();
-        opponents.push(character.id);
-      }
-
-      const bracket = this.generateTournamentBracket(tournament.totalRounds, opponents);
-
-      const [newTournament] = await db
-        .insert(tournaments)
-        .values({
-          ...tournament,
-          opponents,
-          bracket,
-        })
-        .returning();
-
-      return newTournament;
-    }
-
-    async getTournament(id: string): Promise<Tournament | undefined> {
-      const [tournament] = await db.select().from(tournaments).where(eq(tournaments.id, id));
-      return tournament;
-    }
-
-    async getUserTournaments(userId: string): Promise<Tournament[]> {
-      return await db
-        .select()
-        .from(tournaments)
-        .where(eq(tournaments.userId, userId))
-        .orderBy(sql`created_at DESC`);
-    }
-
-    async getActiveTournaments(): Promise<Tournament[]> {
-      return await db
-        .select()
-        .from(tournaments)
-        .where(eq(tournaments.status, 'active'))
-        .orderBy(sql`created_at DESC`)
-        .limit(10);
-    }
-
-    async updateTournament(id: string, updates: Partial<Tournament>): Promise<Tournament> {
-      const [updated] = await db
-        .update(tournaments)
-        .set(updates)
-        .where(eq(tournaments.id, id))
-        .returning();
-
-      return updated;
-    }
-
-    async advanceTournament(tournamentId: string, matchId: string, winnerId: string): Promise<Tournament> {
-      return withRetry(
-        async () => {
-          const tournament = await this.getTournament(tournamentId);
-          if (!tournament) throw new Error('Tournament not found');
-
-          const updatedBracket = { ...tournament.bracket };
-          let matchFound = false;
-
-          for (let round of updatedBracket.rounds) {
-            for (let match of round.matches) {
-              if (match.id === matchId) {
-                match.isCompleted = true;
-                match.winner = winnerId === match.player1.id ? match.player1 : match.player2;
-                matchFound = true;
-                break;
-              }
-            }
-            if (matchFound) break;
-          }
-
-          const currentRound = updatedBracket.rounds.find(r => r.roundNumber === tournament.currentRound);
-          const allMatchesComplete = currentRound?.matches.every(m => m.isCompleted) || false;
-
-          let newCurrentRound = tournament.currentRound;
-          let newStatus = tournament.status;
-
-          if (allMatchesComplete) {
-            if (tournament.currentRound < tournament.totalRounds) {
-              newCurrentRound = tournament.currentRound + 1;
-            } else {
-              newStatus = 'completed';
-            }
-          }
-
-          return await this.updateTournament(tournamentId, {
-            bracket: updatedBracket,
-            currentRound: newCurrentRound,
-            status: newStatus,
-            completedAt: newStatus === 'completed' ? new Date() : undefined,
-          });
-        },
-        { maxAttempts: 3 },
-        `advanceTournament for tournament ${tournamentId}`
+    await db
+      .update(battleRounds)
+      .set(updates)
+      .where(
+        and(
+          eq(battleRounds.battleId, battleId),
+          eq(battleRounds.roundNumber, roundNumber)
+        )
       );
+  }
+
+  // Tournament operations
+  async createTournament(tournament: InsertTournament): Promise<Tournament> {
+    const { getRandomCharacter } = await import("@shared/characters");
+    const numOpponents = Math.pow(2, tournament.totalRounds) - 1;
+    const opponents: string[] = [];
+
+    for (let i = 0; i < numOpponents; i++) {
+      const character = getRandomCharacter();
+      opponents.push(character.id);
     }
 
-    generateTournamentBracket(totalRounds: number, opponents: string[]): TournamentBracket {
-      const { getCharacterById } = require("@shared/characters");
-      const bracket: TournamentBracket = { rounds: [] };
+    const bracket = this.generateTournamentBracket(tournament.totalRounds, opponents);
 
-      for (let roundNum = 1; roundNum <= totalRounds; roundNum++) {
-        const matchesInRound = Math.pow(2, totalRounds - roundNum);
-        const matches: TournamentMatch[] = [];
+    const [newTournament] = await db
+      .insert(tournaments)
+      .values({
+        ...tournament,
+        opponents,
+        bracket,
+      })
+      .returning();
 
-        for (let i = 0; i < matchesInRound; i++) {
-          const match: TournamentMatch = {
-            id: `round-${roundNum}-match-${i}`,
-            player1: { id: 'user', name: 'You', type: 'user' },
-            player2: { id: 'placeholder', name: 'TBD', type: 'ai' },
-            isCompleted: false,
-          };
+    return newTournament;
+  }
 
-          if (roundNum === 1 && i < opponents.length) {
-            const character = getCharacterById(opponents[i]);
-            match.player2 = {
-              id: character.id,
-              name: character.name,
-              type: 'ai',
-              avatar: character.avatar,
-            };
+  async getTournament(id: string): Promise<Tournament | undefined> {
+    const [tournament] = await db.select().from(tournaments).where(eq(tournaments.id, id));
+    return tournament;
+  }
+
+  async getUserTournaments(userId: string): Promise<Tournament[]> {
+    return await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.userId, userId))
+      .orderBy(sql`created_at DESC`);
+  }
+
+  async getActiveTournaments(): Promise<Tournament[]> {
+    return await db
+      .select()
+      .from(tournaments)
+      .where(eq(tournaments.status, 'active'))
+      .orderBy(sql`created_at DESC`)
+      .limit(10);
+  }
+
+  async updateTournament(id: string, updates: Partial<Tournament>): Promise<Tournament> {
+    const [updated] = await db
+      .update(tournaments)
+      .set(updates)
+      .where(eq(tournaments.id, id))
+      .returning();
+
+    return updated;
+  }
+
+  async advanceTournament(tournamentId: string, matchId: string, winnerId: string): Promise<Tournament> {
+    return withRetry(
+      async () => {
+        const tournament = await this.getTournament(tournamentId);
+        if (!tournament) throw new Error('Tournament not found');
+
+        const updatedBracket = { ...tournament.bracket };
+        let matchFound = false;
+
+        for (let round of updatedBracket.rounds) {
+          for (let match of round.matches) {
+            if (match.id === matchId) {
+              match.isCompleted = true;
+              match.winner = winnerId === match.player1.id ? match.player1 : match.player2;
+              matchFound = true;
+              break;
+            }
           }
-
-          matches.push(match);
+          if (matchFound) break;
         }
 
-        bracket.rounds.push({
-          roundNumber: roundNum,
-          matches,
+        const currentRound = updatedBracket.rounds.find(r => r.roundNumber === tournament.currentRound);
+        const allMatchesComplete = currentRound?.matches.every(m => m.isCompleted) || false;
+
+        let newCurrentRound = tournament.currentRound;
+        let newStatus = tournament.status;
+
+        if (allMatchesComplete) {
+          if (tournament.currentRound < tournament.totalRounds) {
+            newCurrentRound = tournament.currentRound + 1;
+          } else {
+            newStatus = 'completed';
+          }
+        }
+
+        return await this.updateTournament(tournamentId, {
+          bracket: updatedBracket,
+          currentRound: newCurrentRound,
+          status: newStatus,
+          completedAt: newStatus === 'completed' ? new Date() : undefined,
         });
-      }
+      },
+      { maxAttempts: 3 },
+      `advanceTournament for tournament ${tournamentId}`
+    );
+  }
 
-      return bracket;
-    }
+  generateTournamentBracket(totalRounds: number, opponents: string[]): TournamentBracket {
+    const { getCharacterById } = require("@shared/characters");
+    const bracket: TournamentBracket = { rounds: [] };
 
-    // API Key management methods
-    async updateUserAPIKeys(
-      userId: string, 
-      keys: { 
-        openaiApiKey?: string; 
-        groqApiKey?: string; 
-        elevenlabsApiKey?: string;
-        preferredTtsService?: string 
-      }
-    ): Promise<User> {
-      const updateData: any = { updatedAt: new Date() };
+    for (let roundNum = 1; roundNum <= totalRounds; roundNum++) {
+      const matchesInRound = Math.pow(2, totalRounds - roundNum);
+      const matches: TournamentMatch[] = [];
 
-      if (keys.openaiApiKey !== undefined) {
-        // In production, you'd encrypt the API key here
-        updateData.openaiApiKey = keys.openaiApiKey;
-      }
-
-      if (keys.groqApiKey !== undefined) {
-        // In production, you'd encrypt the API key here  
-        updateData.groqApiKey = keys.groqApiKey;
-      }
-
-      if (keys.elevenlabsApiKey !== undefined) {
-        // In production, you'd encrypt the API key here  
-        updateData.elevenlabsApiKey = keys.elevenlabsApiKey;
-      }
-
-      if (keys.preferredTtsService !== undefined) {
-        updateData.preferredTtsService = keys.preferredTtsService;
-      }
-
-      const [user] = await db
-        .update(users)
-        .set(updateData)
-        .where(eq(users.id, userId))
-        .returning();
-
-      return user;
-    }
-
-    async getUserAPIKeysStatus(userId: string): Promise<{
-      hasValidOpenAI: boolean;
-      hasValidGroq: boolean;
-      hasValidElevenLabs: boolean;
-      preferredTtsService: string;
-    }> {
-      const user = await this.getUser(userId);
-      if (!user) {
-        return {
-          hasValidOpenAI: false,
-          hasValidGroq: false,
-          hasValidElevenLabs: false,
-          preferredTtsService: 'elevenlabs'
+      for (let i = 0; i < matchesInRound; i++) {
+        const match: TournamentMatch = {
+          id: `round-${roundNum}-match-${i}`,
+          player1: { id: 'user', name: 'You', type: 'user' },
+          player2: { id: 'placeholder', name: 'TBD', type: 'ai' },
+          isCompleted: false,
         };
+
+        if (roundNum === 1 && i < opponents.length) {
+          const character = getCharacterById(opponents[i]);
+          match.player2 = {
+            id: character.id,
+            name: character.name,
+            type: 'ai',
+            avatar: character.avatar,
+          };
+        }
+
+        matches.push(match);
       }
 
+      bracket.rounds.push({
+        roundNumber: roundNum,
+        matches,
+      });
+    }
+
+    return bracket;
+  }
+
+  // API Key management methods
+  async updateUserAPIKeys(
+    userId: string, 
+    keys: { 
+      openaiApiKey?: string; 
+      groqApiKey?: string; 
+      elevenlabsApiKey?: string;
+      preferredTtsService?: string 
+    }
+  ): Promise<User> {
+    const updateData: any = { updatedAt: new Date() };
+
+    if (keys.openaiApiKey !== undefined) {
+      // In production, you'd encrypt the API key here
+      updateData.openaiApiKey = keys.openaiApiKey;
+    }
+
+    if (keys.groqApiKey !== undefined) {
+      // In production, you'd encrypt the API key here  
+      updateData.groqApiKey = keys.groqApiKey;
+    }
+
+    if (keys.elevenlabsApiKey !== undefined) {
+      // In production, you'd encrypt the API key here  
+      updateData.elevenlabsApiKey = keys.elevenlabsApiKey;
+    }
+
+    if (keys.preferredTtsService !== undefined) {
+      updateData.preferredTtsService = keys.preferredTtsService;
+    }
+
+    const [user] = await db
+      .update(users)
+      .set(updateData)
+      .where(eq(users.id, userId))
+      .returning();
+
+    return user;
+  }
+
+  async getUserAPIKeysStatus(userId: string): Promise<{
+    hasValidOpenAI: boolean;
+    hasValidGroq: boolean;
+    hasValidElevenLabs: boolean;
+    preferredTtsService: string;
+  }> {
+    const user = await this.getUser(userId);
+    if (!user) {
       return {
-        hasValidOpenAI: !!(user.openaiApiKey && user.openaiApiKey.length > 0),
-        hasValidGroq: !!(user.groqApiKey && user.groqApiKey.length > 0),
-        hasValidElevenLabs: !!(user.elevenlabsApiKey && user.elevenlabsApiKey.length > 0),
-        preferredTtsService: user.preferredTtsService || 'elevenlabs'
+        hasValidOpenAI: false,
+        hasValidGroq: false,
+        hasValidElevenLabs: false,
+        preferredTtsService: 'elevenlabs'
       };
     }
 
-    // Referral system methods
-    async getUserByReferralCode(referralCode: string): Promise<User | null> {
-      try {
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(eq(users.referralCode, referralCode))
-          .limit(1);
+    return {
+      hasValidOpenAI: !!(user.openaiApiKey && user.openaiApiKey.length > 0),
+      hasValidGroq: !!(user.groqApiKey && user.groqApiKey.length > 0),
+      hasValidElevenLabs: !!(user.elevenlabsApiKey && user.elevenlabsApiKey.length > 0),
+      preferredTtsService: user.preferredTtsService || 'elevenlabs'
+    };
+  }
 
-        return user || null;
-      } catch (error) {
-        console.error('Error finding user by referral code:', error);
-        return null;
-      }
-    }
-
-    async createReferral(referral: InsertReferral): Promise<Referral> {
-      const [newReferral] = await db
-        .insert(referrals)
-        .values(referral)
-        .returning();
-
-      return newReferral;
-    }
-
-    async getUserReferrals(userId: string): Promise<Referral[]> {
-      return await db
+  // Referral system methods
+  async getUserByReferralCode(referralCode: string): Promise<User | null> {
+    try {
+      const [user] = await db
         .select()
-        .from(referrals)
-        .where(eq(referrals.referrerId, userId))
-        .orderBy(desc(referrals.createdAt));
+        .from(users)
+        .where(eq(users.referralCode, referralCode))
+        .limit(1);
+
+      return user || null;
+    } catch (error) {
+      console.error('Error finding user by referral code:', error);
+      return null;
     }
+  }
 
-    // Webhook idempotency methods
-    async getProcessedWebhookEvent(eventId: string): Promise<ProcessedWebhookEvent | undefined> {
-      try {
-        const [event] = await db
-          .select()
-          .from(processedWebhookEvents)
-          .where(eq(processedWebhookEvents.eventId, eventId))
-          .limit(1);
+  async createReferral(referral: InsertReferral): Promise<Referral> {
+    const [newReferral] = await db
+      .insert(referrals)
+      .values(referral)
+      .returning();
 
-        return event;
-      } catch (error) {
-        console.error('Error finding processed webhook event:', error);
-        throw error;
-      }
+    return newReferral;
+  }
+
+  async getUserReferrals(userId: string): Promise<Referral[]> {
+    return await db
+      .select()
+      .from(referrals)
+      .where(eq(referrals.referrerId, userId))
+      .orderBy(desc(referrals.createdAt));
+  }
+
+  // Webhook idempotency methods
+  async getProcessedWebhookEvent(eventId: string): Promise<ProcessedWebhookEvent | undefined> {
+    try {
+      const [event] = await db
+        .select()
+        .from(processedWebhookEvents)
+        .where(eq(processedWebhookEvents.eventId, eventId))
+        .limit(1);
+
+      return event;
+    } catch (error) {
+      console.error('Error finding processed webhook event:', error);
+      throw error;
     }
+  }
 
-    async recordProcessedWebhookEvent(event: InsertWebhookEvent): Promise<ProcessedWebhookEvent> {
-      return withRetry(
-        async () => {
-          const [newEvent] = await db
-            .insert(processedWebhookEvents)
-            .values(event)
-            .returning();
+  async recordProcessedWebhookEvent(event: InsertWebhookEvent): Promise<ProcessedWebhookEvent> {
+    return withRetry(
+      async () => {
+        const [newEvent] = await db
+          .insert(processedWebhookEvents)
+          .values(event)
+          .returning();
 
-          return newEvent;
-        },
-        { maxAttempts: 3 },
-        `recordProcessedWebhookEvent for ${event.eventId}`
-      );
+        return newEvent;
+      },
+      { maxAttempts: 3 },
+      `recordProcessedWebhookEvent for ${event.eventId}`
+    );
+  }
+
+  // User Clone operations
+  async getUserClone(userId: string): Promise<UserClone | undefined> {
+    try {
+      const [clone] = await db
+        .select()
+        .from(userClones)
+        .where(and(
+          eq(userClones.userId, userId),
+          eq(userClones.isActive, true)
+        ))
+        .limit(1);
+
+      return clone;
+    } catch (error) {
+      console.error('Error fetching user clone:', error);
+      throw error;
     }
+  }
 
-    // User Clone operations
-    async getUserClone(userId: string): Promise<UserClone | undefined> {
-      try {
-        const [clone] = await db
-          .select()
-          .from(userClones)
-          .where(and(
-            eq(userClones.userId, userId),
-            eq(userClones.isActive, true)
-          ))
-          .limit(1);
+  async createOrUpdateUserClone(userId: string, battlesLimit: number = 10): Promise<UserClone> {
+    return withRetry(
+      async () => {
+        // Get user's battle history to analyze performance
+        // Support analyzing more battles for better accuracy: 10, 25, 50, or all (9999)
+        const userBattles = await this.getUserBattles(userId, battlesLimit);
 
-        return clone;
-      } catch (error) {
-        console.error('Error fetching user clone:', error);
-        throw error;
-      }
-    }
-
-    async createOrUpdateUserClone(userId: string, battlesLimit: number = 10): Promise<UserClone> {
-      return withRetry(
-        async () => {
-          // Get user's battle history to analyze performance
-          // Support analyzing more battles for better accuracy: 10, 25, 50, or all (9999)
-          const userBattles = await this.getUserBattles(userId, battlesLimit);
-
-          if (userBattles.length === 0) {
-            // No battles yet - create default clone
-            const user = await this.getUser(userId);
-            const cloneName = user?.firstName ? `${user.firstName}'s Clone` : "Your Clone";
-
-            const [newClone] = await db
-              .insert(userClones)
-              .values({
-                userId,
-                cloneName,
-                skillLevel: 50, // Default skill level
-                avgRhymeDensity: 50,
-                avgFlowQuality: 50,
-                avgCreativity: 50,
-                battlesAnalyzed: 0,
-                style: "balanced",
-                voiceId: "Thunder-PlayAI", // Default voice
-              })
-              .returning();
-
-            return newClone;
-          }
-
-          // Calculate average performance metrics from battles
-          let totalUserScore = 0;
-          let totalRhyme = 0;
-          let totalFlow = 0;
-          let totalCreativity = 0;
-          let roundsCount = 0;
-
-          for (const battle of userBattles) {
-            totalUserScore += battle.userScore;
-
-            // Analyze rounds for detailed metrics
-            if (battle.rounds && Array.isArray(battle.rounds)) {
-              for (const round of battle.rounds) {
-                if (round.scores) {
-                  totalRhyme += round.scores.rhymeDensity || 0;
-                  totalFlow += round.scores.flowQuality || 0;
-                  totalCreativity += round.scores.creativity || 0;
-                  roundsCount++;
-                }
-              }
-            }
-          }
-
-          const avgUserScore = Math.round(totalUserScore / userBattles.length);
-          const avgRhyme = roundsCount > 0 ? Math.round(totalRhyme / roundsCount) : 50;
-          const avgFlow = roundsCount > 0 ? Math.round(totalFlow / roundsCount) : 50;
-          const avgCreativity = roundsCount > 0 ? Math.round(totalCreativity / roundsCount) : 50;
-
-          // Determine style based on metrics
-          let style = "balanced";
-          if (avgRhyme > 70) style = "technical";
-          else if (avgFlow > 70) style = "smooth";
-          else if (avgCreativity > 70) style = "creative";
-
+        if (userBattles.length === 0) {
+          // No battles yet - create default clone
           const user = await this.getUser(userId);
           const cloneName = user?.firstName ? `${user.firstName}'s Clone` : "Your Clone";
 
-          // Check if clone exists
-          const existingClone = await this.getUserClone(userId);
-
-          if (existingClone) {
-            // Update existing clone
-            const [updatedClone] = await db
-              .update(userClones)
-              .set({
-                skillLevel: avgUserScore,
-                avgRhymeDensity: avgRhyme,
-                avgFlowQuality: avgFlow,
-                avgCreativity: avgCreativity,
-                battlesAnalyzed: userBattles.length,
-                style,
-                updatedAt: new Date(),
-              })
-              .where(eq(userClones.id, existingClone.id))
-              .returning();
-
-            return updatedClone;
-          } else {
-            // Create new clone
-            const [newClone] = await db
-              .insert(userClones)
-              .values({
-                userId,
-                cloneName,
-                skillLevel: avgUserScore,
-                avgRhymeDensity: avgRhyme,
-                avgFlowQuality: avgFlow,
-                avgCreativity: avgCreativity,
-                battlesAnalyzed: userBattles.length,
-                style,
-                voiceId: "Thunder-PlayAI", // Default voice
-              })
-              .returning();
-
-            return newClone;
-          }
-        },
-        { maxAttempts: 3 },
-        `createOrUpdateUserClone for ${userId}`
-      );
-    }
-
-    async getCloneById(cloneId: string): Promise<UserClone | undefined> {
-      try {
-        const [clone] = await db
-          .select()
-          .from(userClones)
-          .where(eq(userClones.id, cloneId))
-          .limit(1);
-
-        return clone;
-      } catch (error) {
-        console.error('Error fetching clone by ID:', error);
-        throw error;
-      }
-    }
-
-    async getAllAvailableClones(excludeUserId?: string): Promise<Array<UserClone & { ownerUsername: string }>> {
-      try {
-        const clones = await db
-          .select({
-            id: userClones.id,
-            userId: userClones.userId,
-            cloneName: userClones.cloneName,
-            skillLevel: userClones.skillLevel,
-            avgRhymeDensity: userClones.avgRhymeDensity,
-            avgFlowQuality: userClones.avgFlowQuality,
-            avgCreativity: userClones.avgCreativity,
-            battlesAnalyzed: userClones.battlesAnalyzed,
-            style: userClones.style,
-            voiceId: userClones.voiceId,
-            isActive: userClones.isActive,
-            createdAt: userClones.createdAt,
-            updatedAt: userClones.updatedAt,
-            ownerUsername: sql<string>`COALESCE(${users.username}, ${users.email}, 'Anonymous')`,
-          })
-          .from(userClones)
-          .leftJoin(users, eq(userClones.userId, users.id))
-          .where(
-            excludeUserId 
-              ? and(
-                  eq(userClones.isActive, true),
-                  sql`${userClones.userId} != ${excludeUserId}`
-                )
-              : eq(userClones.isActive, true)
-          )
-          .orderBy(desc(userClones.skillLevel));
-
-        return clones;
-      } catch (error) {
-        console.error('Error fetching all available clones:', error);
-        throw error;
-      }
-    }
-
-    // ====================
-    // MONETIZATION OPERATIONS
-    // ====================
-
-    // Wallet operations
-    async getUserWallet(userId: string): Promise<UserWallet | undefined> {
-      try {
-        const [wallet] = await db
-          .select()
-          .from(userWallets)
-          .where(eq(userWallets.userId, userId))
-          .limit(1);
-
-        return wallet;
-      } catch (error) {
-        console.error('Error fetching user wallet:', error);
-        throw error;
-      }
-    }
-
-    async createUserWallet(userId: string): Promise<UserWallet> {
-      return withRetry(
-        async () => {
-          const [wallet] = await db
-            .insert(userWallets)
-            .values({ userId })
-            .returning();
-
-          return wallet;
-        },
-        { maxAttempts: 3 },
-        `createUserWallet for ${userId}`
-      );
-    }
-
-    async getOrCreateUserWallet(userId: string): Promise<UserWallet> {
-      const existing = await this.getUserWallet(userId);
-      if (existing) return existing;
-      return this.createUserWallet(userId);
-    }
-
-    async updateWalletBalance(userId: string, updates: {
-      battleCredits?: number;
-      tokens?: string;
-      cloneAdRevenue?: string;
-    }): Promise<UserWallet> {
-      return withRetry(
-        async () => {
-          const wallet = await this.getOrCreateUserWallet(userId);
-
-          const [updated] = await db
-            .update(userWallets)
-            .set({
-              ...updates,
-              updatedAt: new Date(),
-            })
-            .where(eq(userWallets.userId, userId))
-            .returning();
-
-          return updated;
-        },
-        { maxAttempts: 3 },
-        `updateWalletBalance for ${userId}`
-      );
-    }
-
-    // Transaction operations
-    async recordTransaction(transaction: InsertTransaction): Promise<Transaction> {
-      return withRetry(
-        async () => {
-          const [record] = await db
-            .insert(transactions)
-            .values(transaction)
-            .returning();
-
-          return record;
-        },
-        { maxAttempts: 3 },
-        `recordTransaction for ${transaction.userId}`
-      );
-    }
-
-    async getUserTransactions(userId: string, limit: number = 50): Promise<Transaction[]> {
-      try {
-        const records = await db
-          .select()
-          .from(transactions)
-          .where(eq(transactions.userId, userId))
-          .orderBy(desc(transactions.createdAt))
-          .limit(limit);
-
-        return records;
-      } catch (error) {
-        console.error('Error fetching transactions:', error);
-        throw error;
-      }
-    }
-
-    // Mining operations
-    async recordMiningEvent(event: InsertMiningEvent): Promise<MiningEvent> {
-      return withRetry(
-        async () => {
-          const [record] = await db
-            .insert(miningEvents)
-            .values(event)
-            .returning();
-
-          return record;
-        },
-        { maxAttempts: 3 },
-        `recordMiningEvent for ${event.userId}`
-      );
-    }
-
-    async getUserMiningEvents(userId: string, limit: number = 50): Promise<MiningEvent[]> {
-      try {
-        const events = await db
-          .select()
-          .from(miningEvents)
-          .where(eq(miningEvents.userId, userId))
-          .orderBy(desc(miningEvents.createdAt))
-          .limit(limit);
-
-        return events;
-      } catch (error) {
-        console.error('Error fetching mining events:', error);
-        throw error;
-      }
-    }
-
-    async awardMiningTokens(userId: string, activityType: string, battleId?: string): Promise<{ tokens: string; transaction: Transaction }> {
-      return withRetry(
-        async () => {
-          // Determine token amount based on activity type
-          let tokensEarned = "0.00000000";
-          switch (activityType) {
-            case "battle_complete":
-              tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.BATTLE_COMPLETE;
-              break;
-            case "battle_win":
-              tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.BATTLE_WIN;
-              break;
-            case "daily_login":
-              tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.DAILY_LOGIN;
-              break;
-            case "clone_battled":
-              tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.CLONE_BATTLED;
-              break;
-            case "referral":
-              tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.REFERRAL;
-              break;
-          }
-
-          // Record mining event
-          await this.recordMiningEvent({
-            userId,
-            tokensEarned,
-            activityType,
-            battleId,
-          });
-
-          // Update wallet
-          const wallet = await this.getOrCreateUserWallet(userId);
-          const newTokenBalance = (parseFloat(wallet.tokens) + parseFloat(tokensEarned)).toFixed(8);
-          const newLifetimeEarned = (parseFloat(wallet.lifetimeEarned) + parseFloat(tokensEarned)).toFixed(8);
-
-          await this.updateWalletBalance(userId, {
-            tokens: newTokenBalance,
-          });
-
-          await db
-            .update(userWallets)
-            .set({ lifetimeEarned: newLifetimeEarned })
-            .where(eq(userWallets.userId, userId));
-
-          // Record transaction
-          const transaction = await this.recordTransaction({
-            userId,
-            type: "mining",
-            amount: tokensEarned,
-            currency: "tokens",
-            description: `Mined tokens: ${activityType}`,
-            battleId,
-          });
-
-          console.log(`💰 User ${userId} mined ${tokensEarned} tokens (${activityType})`);
-
-          return { tokens: tokensEarned, transaction };
-        },
-        { maxAttempts: 3 },
-        `awardMiningTokens for ${userId}`
-      );
-    }
-
-    // Ad revenue operations
-    async recordAdImpression(impression: InsertAdImpression): Promise<AdImpression> {
-      return withRetry(
-        async () => {
-          const [record] = await db
-            .insert(adImpressions)
-            .values([impression])
-            .returning();
-
-          // Update clone owner's wallet
-          const cloneOwnerId = impression.cloneOwnerId || "";
-          const wallet = await this.getOrCreateUserWallet(cloneOwnerId);
-          const revenueShare = impression.revenueShare || "0.00";
-          const newAdRevenue = (parseFloat(wallet.cloneAdRevenue) + parseFloat(revenueShare)).toFixed(2);
-          const newImpressions = wallet.totalAdImpressions + 1;
-
-          await db
-            .update(userWallets)
-            .set({
-              cloneAdRevenue: newAdRevenue,
-              totalAdImpressions: newImpressions,
-              updatedAt: new Date(),
-            })
-            .where(eq(userWallets.userId, cloneOwnerId));
-
-          // Record revenue transaction
-          await this.recordTransaction({
-            userId: cloneOwnerId,
-            type: "ad_revenue",
-            amount: revenueShare,
-            currency: "usd",
-            description: "Ad revenue from clone battle",
-            battleId: impression.battleId,
-            relatedUserId: impression.viewerId,
-          });
-
-          console.log(`📺 Ad revenue: ${cloneOwnerId} earned $${revenueShare} from ad`);
-
-          return record;
-        },
-        { maxAttempts: 3 },
-        `recordAdImpression for battle ${impression.battleId || "unknown"}`
-      );
-    }
-
-    async getCloneAdRevenue(cloneOwnerId: string): Promise<{ totalRevenue: string; impressions: number }> {
-      try {
-        const wallet = await this.getOrCreateUserWallet(cloneOwnerId);
-
-        return {
-          totalRevenue: wallet.cloneAdRevenue,
-          impressions: wallet.totalAdImpressions,
-        };
-      } catch (error) {
-        console.error('Error fetching clone ad revenue:', error);
-        throw error;
-      }
-    }
-
-    // Battle monetization
-    async deductBattleCredits(userId: string, amount: number): Promise<boolean> {
-      return withRetry(
-        async () => {
-          const wallet = await this.getOrCreateUserWallet(userId);
-
-          if (wallet.battleCredits < amount) {
-            console.log(`❌ User ${userId} has insufficient credits: ${wallet.battleCredits} < ${amount}`);
-            return false;
-          }
-
-          const newBalance = wallet.battleCredits - amount;
-          await this.updateWalletBalance(userId, { battleCredits: newBalance });
-
-          // Record transaction
-          await this.recordTransaction({
-            userId,
-            type: "battle_cost",
-            amount: amount.toString(),
-            currency: "credits",
-            description: `Spent credits to start battle`,
-          });
-
-          console.log(`💳 User ${userId} spent ${amount} credits, new balance: ${newBalance}`);
-
-          return true;
-        },
-        { maxAttempts: 3 },
-        `deductBattleCredits for ${userId}`
-      );
-    }
-
-    async awardBattleRewards(userId: string, battleId: string, didWin: boolean): Promise<void> {
-      return withRetry(
-        async () => {
-          const wallet = await this.getOrCreateUserWallet(userId);
-
-          // Award completion tokens
-          await this.awardMiningTokens(userId, "battle_complete", battleId);
-
-          if (didWin) {
-            // Award win bonus tokens
-            await this.awardMiningTokens(userId, "battle_win", battleId);
-
-            // Award credits for winning
-            const creditsEarned = MONETIZATION_CONFIG.CREDIT_REWARDS.BATTLE_WIN;
-            const newBalance = wallet.battleCredits + creditsEarned;
-
-            await this.updateWalletBalance(userId, { battleCredits: newBalance });
-
-            await this.recordTransaction({
-              userId,
-              type: "battle_win",
-              amount: creditsEarned.toString(),
-              currency: "credits",
-              description: `Won battle reward`,
-              battleId,
-            });
-
-            console.log(`🏆 User ${userId} won battle! Earned ${creditsEarned} credits`);
-          }
-        },
-        { maxAttempts: 3 },
-        `awardBattleRewards for ${userId}`
-      );
-    }
-
-    // Arc Blockchain operations (Hackathon feature!)
-    async getOrCreateArcWallet(userId: string, walletAddress: string): Promise<ArcWallet> {
-      return withRetry(
-        async () => {
-          const existing = await this.getArcWallet(userId);
-          if (existing) return existing;
-
-          const [wallet] = await db
-            .insert(arcWallets)
+          const [newClone] = await db
+            .insert(userClones)
             .values({
               userId,
-              walletAddress,
+              cloneName,
+              skillLevel: 50, // Default skill level
+              avgRhymeDensity: 50,
+              avgFlowQuality: 50,
+              avgCreativity: 50,
+              battlesAnalyzed: 0,
+              style: "balanced",
+              voiceId: "Thunder-PlayAI", // Default voice
             })
             .returning();
 
-          console.log(`⛓️ Created Arc wallet for user ${userId}: ${walletAddress}`);
-          return wallet;
-        },
-        { maxAttempts: 3 },
-        `getOrCreateArcWallet for ${userId}`
-      );
-    }
+          return newClone;
+        }
 
-    async getArcWallet(userId: string): Promise<ArcWallet | undefined> {
-      const [wallet] = await db
-        .select()
-        .from(arcWallets)
-        .where(eq(arcWallets.userId, userId));
-      return wallet;
-    }
+        // Calculate average performance metrics from battles
+        let totalUserScore = 0;
+        let totalRhyme = 0;
+        let totalFlow = 0;
+        let totalCreativity = 0;
+        let roundsCount = 0;
 
-    async updateArcWalletBalance(userId: string, updates: {
-      usdcBalance?: string;
-      lifetimeEarned?: string;
-    }): Promise<ArcWallet> {
-      return withRetry(
-        async () => {
-          // First, check if wallet exists
-          const existing = await this.getArcWallet(userId);
+        for (const battle of userBattles) {
+          totalUserScore += battle.userScore;
 
-          if (!existing) {
-            throw new Error(`Arc wallet not found for user ${userId}. Create wallet first using getOrCreateArcWallet.`);
-          }
-
-          const [wallet] = await db
-            .update(arcWallets)
-            .set({
-              ...updates,
-              lastSyncedAt: new Date(),
-              updatedAt: new Date(),
-            })
-            .where(eq(arcWallets.userId, userId))
-            .returning();
-
-          if (!wallet) {
-            throw new Error(`Failed to update Arc wallet for user ${userId}`);
-          }
-
-          console.log(`⛓️ Updated Arc wallet for ${userId}: USDC=${updates.usdcBalance || 'unchanged'}`);
-          return wallet;
-        },
-        { maxAttempts: 3 },
-        `updateArcWalletBalance for ${userId}`
-      );
-    }
-
-    async recordArcTransaction(transaction: InsertArcTransaction): Promise<ArcTransaction> {
-      return withRetry(
-        async () => {
-          const [tx] = await db
-            .insert(arcTransactions)
-            .values(transaction)
-            .returning();
-
-          console.log(`⛓️ Recorded Arc transaction: ${tx.type} ${tx.amount} USDC for user ${tx.userId}`);
-          return tx;
-        },
-        { maxAttempts: 3 },
-        `recordArcTransaction`
-      );
-    }
-
-    async getUserArcTransactions(userId: string, limit: number = 20): Promise<ArcTransaction[]> {
-      const txs = await db
-        .select()
-        .from(arcTransactions)
-        .where(eq(arcTransactions.userId, userId))
-        .orderBy(desc(arcTransactions.createdAt))
-        .limit(limit);
-
-      return txs;
-    }
-
-    async updateArcTransactionStatus(
-      txId: string, 
-      status: string, 
-      txHash?: string, 
-      blockNumber?: number
-    ): Promise<ArcTransaction> {
-      return withRetry(
-        async () => {
-          const [tx] = await db
-            .update(arcTransactions)
-            .set({
-              status,
-              txHash,
-              blockNumber,
-              confirmedAt: status === 'confirmed' ? new Date() : undefined,
-            })
-            .where(eq(arcTransactions.id, txId))
-            .returning();
-
-          console.log(`⛓️ Updated Arc transaction ${txId}: ${status}`);
-          return tx;
-        },
-        { maxAttempts: 3 },
-        `updateArcTransactionStatus for ${txId}`
-      );
-    }
-
-    // Voice Command operations (Hackathon feature!)
-    async recordVoiceCommand(command: InsertVoiceCommand): Promise<VoiceCommand> {
-      return withRetry(
-        async () => {
-          const [cmd] = await db
-            .insert(voiceCommands)
-            .values(command)
-            .returning();
-
-          console.log(`🎤 Recorded voice command: "${cmd.commandText}" with intent ${cmd.intent}`);
-          return cmd;
-        },
-        { maxAttempts: 3 },
-        `recordVoiceCommand`
-      );
-    }
-
-    async getUserVoiceCommands(userId: string, limit: number = 20): Promise<VoiceCommand[]> {
-      const commands = await db
-        .select()
-        .from(voiceCommands)
-        .where(eq(voiceCommands.userId, userId))
-        .orderBy(desc(voiceCommands.createdAt))
-        .limit(limit);
-
-      return commands;
-    }
-
-    async updateVoiceCommand(commandId: string, updates: {
-      status?: string;
-      arcTransactionId?: string;
-      errorMessage?: string;
-      audioUrl?: string;
-      executedAt?: Date;
-    }): Promise<VoiceCommand> {
-      return withRetry(
-        async () => {
-          const [cmd] = await db
-            .update(voiceCommands)
-            .set(updates)
-            .where(eq(voiceCommands.id, commandId))
-            .returning();
-
-          console.log(`🎤 Updated voice command ${commandId}: ${updates.status || 'updated'}`);
-          return cmd;
-        },
-        { maxAttempts: 3 },
-        `updateVoiceCommand for ${commandId}`
-      );
-    }
-
-    // ===========================
-    // PvP Battle Invite operations
-    // ===========================
-
-    async createBattleInvite(invite: InsertBattleInvite): Promise<BattleInvite> {
-      return withRetry(
-        async () => {
-          const [created] = await db
-            .insert(battleInvites)
-            .values(invite)
-            .returning();
-
-          console.log(`⚔️ Created PvP battle invite from ${invite.challengerId} to ${invite.opponentId}`);
-          return created;
-        },
-        { maxAttempts: 3 },
-        `createBattleInvite`
-      );
-    }
-
-    async getBattleInvite(id: string): Promise<BattleInvite | undefined> {
-      const [invite] = await db
-        .select()
-        .from(battleInvites)
-        .where(eq(battleInvites.id, id));
-      return invite;
-    }
-
-    async getUserBattleInvites(userId: string, type: 'sent' | 'received' | 'all'): Promise<BattleInvite[]> {
-      let query = db.select().from(battleInvites);
-
-      if (type === 'sent') {
-        query = query.where(eq(battleInvites.challengerId, userId));
-      } else if (type === 'received') {
-        query = query.where(eq(battleInvites.opponentId, userId));
-      } else {
-        query = query.where(
-          sql`${battleInvites.challengerId} = ${userId} OR ${battleInvites.opponentId} = ${userId}`
-        );
-      }
-
-      const invites = await query
-        .orderBy(desc(battleInvites.createdAt))
-        .limit(50);
-
-      return invites;
-    }
-
-    async updateBattleInviteStatus(inviteId: string, status: string, battleId?: string): Promise<BattleInvite> {
-      return withRetry(
-        async () => {
-          const [updated] = await db
-            .update(battleInvites)
-            .set({
-              status,
-              battleId,
-              updatedAt: new Date(),
-            })
-            .where(eq(battleInvites.id, inviteId))
-            .returning();
-
-          console.log(`⚔️ Updated battle invite ${inviteId}: ${status}`);
-          return updated;
-        },
-        { maxAttempts: 3 },
-        `updateBattleInviteStatus`
-      );
-    }
-
-    async expireOldInvites(): Promise<void> {
-      await db
-        .update(battleInvites)
-        .set({ status: 'expired', updatedAt: new Date() })
-        .where(
-          and(
-            eq(battleInvites.status, 'pending'),
-            lt(battleInvites.expiresAt, new Date())
-          )
-        );
-
-      console.log(`⚔️ Expired old pending battle invites`);
-    }
-
-    // ===========================
-    // PvP Round Submission operations
-    // ===========================
-
-    async createRoundSubmission(submission: InsertBattleRoundSubmission): Promise<BattleRoundSubmission> {
-      return withRetry(
-        async () => {
-          const [created] = await db
-            .insert(battleRoundSubmissions)
-            .values(submission)
-            .returning();
-
-          console.log(`⚔️ Created round submission: Battle ${submission.battleId}, Round ${submission.roundNumber}, User ${submission.userId}`);
-          return created;
-        },
-        { maxAttempts: 3 },
-        `createRoundSubmission`
-      );
-    }
-
-    async getRoundSubmissions(battleId: string, roundNumber: number): Promise<BattleRoundSubmission[]> {
-      const submissions = await db
-        .select()
-        .from(battleRoundSubmissions)
-        .where(
-          and(
-            eq(battleRoundSubmissions.battleId, battleId),
-            eq(battleRoundSubmissions.roundNumber, roundNumber)
-          )
-        );
-
-      return submissions;
-    }
-
-    async checkBothSubmissionsExist(battleId: string, roundNumber: number): Promise<boolean> {
-      const submissions = await this.getRoundSubmissions(battleId, roundNumber);
-      return submissions.length === 2;
-    }
-
-    async processPvPRound(battleId: string, roundNumber: number): Promise<void> {
-      return withRetry(
-        async () => {
-          const submissions = await this.getRoundSubmissions(battleId, roundNumber);
-
-          if (submissions.length !== 2) {
-            throw new Error(`Cannot process round: Expected 2 submissions, got ${submissions.length}`);
-          }
-
-          // Get battle to determine roles
-          const battle = await this.getBattle(battleId);
-          if (!battle) {
-            throw new Error(`Battle ${battleId} not found`);
-          }
-
-          // Calculate cumulative scores
-          const challengerSubmission = submissions.find(s => s.userId === battle.challengerUserId);
-          const opponentSubmission = submissions.find(s => s.userId === battle.opponentUserId);
-
-          if (!challengerSubmission || !opponentSubmission) {
-            throw new Error('Could not find submissions for both players');
-          }
-
-          const challengerRoundScore = challengerSubmission.scores?.totalScore || 0;
-          const opponentRoundScore = opponentSubmission.scores?.totalScore || 0;
-
-          // Update cumulative battle scores
-          const newChallengerScore = (battle.challengerScore || 0) + challengerRoundScore;
-          const newOpponentScore = (battle.opponentScore || 0) + opponentRoundScore;
-
-          await this.updatePvPBattleScores(battleId, newChallengerScore, newOpponentScore);
-
-          // Check if battle is complete
-          if (roundNumber >= (battle.maxRounds || 5)) {
-            const winnerId = newChallengerScore > newOpponentScore 
-              ? battle.challengerUserId 
-              : newOpponentScore > newChallengerScore 
-                ? battle.opponentUserId 
-                : null; // tie
-
-            if (winnerId) {
-              await this.completePvPBattle(battleId, winnerId);
-            } else {
-              // Handle tie - mark as completed without winner
-              await db
-                .update(battles)
-                .set({
-                  status: 'completed',
-                  completedAt: new Date(),
-                })
-                .where(eq(battles.id, battleId));
+          // Analyze rounds for detailed metrics
+          if (battle.rounds && Array.isArray(battle.rounds)) {
+            for (const round of battle.rounds) {
+              if (round.scores) {
+                totalRhyme += round.scores.rhymeDensity || 0;
+                totalFlow += round.scores.flowQuality || 0;
+                totalCreativity += round.scores.creativity || 0;
+                roundsCount++;
+              }
             }
           }
+        }
 
-          console.log(`⚔️ Processed PvP round ${roundNumber} for battle ${battleId}`);
-        },
-        { maxAttempts: 3 },
-        `processPvPRound`
-      );
+        const avgUserScore = Math.round(totalUserScore / userBattles.length);
+        const avgRhyme = roundsCount > 0 ? Math.round(totalRhyme / roundsCount) : 50;
+        const avgFlow = roundsCount > 0 ? Math.round(totalFlow / roundsCount) : 50;
+        const avgCreativity = roundsCount > 0 ? Math.round(totalCreativity / roundsCount) : 50;
+
+        // Determine style based on metrics
+        let style = "balanced";
+        if (avgRhyme > 70) style = "technical";
+        else if (avgFlow > 70) style = "smooth";
+        else if (avgCreativity > 70) style = "creative";
+
+        const user = await this.getUser(userId);
+        const cloneName = user?.firstName ? `${user.firstName}'s Clone` : "Your Clone";
+
+        // Check if clone exists
+        const existingClone = await this.getUserClone(userId);
+
+        if (existingClone) {
+          // Update existing clone
+          const [updatedClone] = await db
+            .update(userClones)
+            .set({
+              skillLevel: avgUserScore,
+              avgRhymeDensity: avgRhyme,
+              avgFlowQuality: avgFlow,
+              avgCreativity: avgCreativity,
+              battlesAnalyzed: userBattles.length,
+              style,
+              updatedAt: new Date(),
+            })
+            .where(eq(userClones.id, existingClone.id))
+            .returning();
+
+          return updatedClone;
+        } else {
+          // Create new clone
+          const [newClone] = await db
+            .insert(userClones)
+            .values({
+              userId,
+              cloneName,
+              skillLevel: avgUserScore,
+              avgRhymeDensity: avgRhyme,
+              avgFlowQuality: avgFlow,
+              avgCreativity: avgCreativity,
+              battlesAnalyzed: userBattles.length,
+              style,
+              voiceId: "Thunder-PlayAI", // Default voice
+            })
+            .returning();
+
+          return newClone;
+        }
+      },
+      { maxAttempts: 3 },
+      `createOrUpdateUserClone for ${userId}`
+    );
+  }
+
+  async getCloneById(cloneId: string): Promise<UserClone | undefined> {
+    try {
+      const [clone] = await db
+        .select()
+        .from(userClones)
+        .where(eq(userClones.id, cloneId))
+        .limit(1);
+
+      return clone;
+    } catch (error) {
+      console.error('Error fetching clone by ID:', error);
+      throw error;
     }
+  }
 
-    async updatePvPBattleScores(battleId: string, challengerScore: number, opponentScore: number): Promise<void> {
-      await db
-        .update(battles)
-        .set({
-          challengerScore,
-          opponentScore,
+  async getAllAvailableClones(excludeUserId?: string): Promise<Array<UserClone & { ownerUsername: string }>> {
+    try {
+      const clones = await db
+        .select({
+          id: userClones.id,
+          userId: userClones.userId,
+          cloneName: userClones.cloneName,
+          skillLevel: userClones.skillLevel,
+          avgRhymeDensity: userClones.avgRhymeDensity,
+          avgFlowQuality: userClones.avgFlowQuality,
+          avgCreativity: userClones.avgCreativity,
+          battlesAnalyzed: userClones.battlesAnalyzed,
+          style: userClones.style,
+          voiceId: userClones.voiceId,
+          isActive: userClones.isActive,
+          createdAt: userClones.createdAt,
+          updatedAt: userClones.updatedAt,
+          ownerUsername: sql<string>`COALESCE(${users.username}, ${users.email}, 'Anonymous')`,
         })
-        .where(eq(battles.id, battleId));
+        .from(userClones)
+        .leftJoin(users, eq(userClones.userId, users.id))
+        .where(
+          excludeUserId 
+            ? and(
+                eq(userClones.isActive, true),
+                sql`${userClones.userId} != ${excludeUserId}`
+              )
+            : eq(userClones.isActive, true)
+        )
+        .orderBy(desc(userClones.skillLevel));
 
-      console.log(`⚔️ Updated PvP battle scores: Challenger ${challengerScore}, Opponent ${opponentScore}`);
+      return clones;
+    } catch (error) {
+      console.error('Error fetching all available clones:', error);
+      throw error;
     }
+  }
 
-    async completePvPBattle(battleId: string, winnerId: string): Promise<void> {
-      return withRetry(
-        async () => {
-          await db
-            .update(battles)
-            .set({
-              status: 'completed',
-              winnerUserId: winnerId,
-              completedAt: new Date(),
-            })
-            .where(eq(battles.id, battleId));
+  // ====================
+  // MONETIZATION OPERATIONS
+  // ====================
 
-          console.log(`⚔️ Completed PvP battle ${battleId}, winner: ${winnerId}`);
-        },
-        { maxAttempts: 3 },
-        `completePvPBattle`
+  // Wallet operations
+  async getUserWallet(userId: string): Promise<UserWallet | undefined> {
+    try {
+      const [wallet] = await db
+        .select()
+        .from(userWallets)
+        .where(eq(userWallets.userId, userId))
+        .limit(1);
+
+      return wallet;
+    } catch (error) {
+      console.error('Error fetching user wallet:', error);
+      throw error;
+    }
+  }
+
+  async createUserWallet(userId: string): Promise<UserWallet> {
+    return withRetry(
+      async () => {
+        const [wallet] = await db
+          .insert(userWallets)
+          .values({ userId })
+          .returning();
+
+        return wallet;
+      },
+      { maxAttempts: 3 },
+      `createUserWallet for ${userId}`
+    );
+  }
+
+  async getOrCreateUserWallet(userId: string): Promise<UserWallet> {
+    const existing = await this.getUserWallet(userId);
+    if (existing) return existing;
+    return this.createUserWallet(userId);
+  }
+
+  async updateWalletBalance(userId: string, updates: {
+    battleCredits?: number;
+    tokens?: string;
+    cloneAdRevenue?: string;
+  }): Promise<UserWallet> {
+    return withRetry(
+      async () => {
+        const wallet = await this.getOrCreateUserWallet(userId);
+
+        const [updated] = await db
+          .update(userWallets)
+          .set({
+            ...updates,
+            updatedAt: new Date(),
+          })
+          .where(eq(userWallets.userId, userId))
+          .returning();
+
+        return updated;
+      },
+      { maxAttempts: 3 },
+      `updateWalletBalance for ${userId}`
+    );
+  }
+
+  // Transaction operations
+  async recordTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    return withRetry(
+      async () => {
+        const [record] = await db
+          .insert(transactions)
+          .values(transaction)
+          .returning();
+
+        return record;
+      },
+      { maxAttempts: 3 },
+      `recordTransaction for ${transaction.userId}`
+    );
+  }
+
+  async getUserTransactions(userId: string, limit: number = 50): Promise<Transaction[]> {
+    try {
+      const records = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.userId, userId))
+        .orderBy(desc(transactions.createdAt))
+        .limit(limit);
+
+      return records;
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      throw error;
+    }
+  }
+
+  // Mining operations
+  async recordMiningEvent(event: InsertMiningEvent): Promise<MiningEvent> {
+    return withRetry(
+      async () => {
+        const [record] = await db
+          .insert(miningEvents)
+          .values(event)
+          .returning();
+
+        return record;
+      },
+      { maxAttempts: 3 },
+      `recordMiningEvent for ${event.userId}`
+    );
+  }
+
+  async getUserMiningEvents(userId: string, limit: number = 50): Promise<MiningEvent[]> {
+    try {
+      const events = await db
+        .select()
+        .from(miningEvents)
+        .where(eq(miningEvents.userId, userId))
+        .orderBy(desc(miningEvents.createdAt))
+        .limit(limit);
+
+      return events;
+    } catch (error) {
+      console.error('Error fetching mining events:', error);
+      throw error;
+    }
+  }
+
+  async awardMiningTokens(userId: string, activityType: string, battleId?: string): Promise<{ tokens: string; transaction: Transaction }> {
+    return withRetry(
+      async () => {
+        // Determine token amount based on activity type
+        let tokensEarned = "0.00000000";
+        switch (activityType) {
+          case "battle_complete":
+            tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.BATTLE_COMPLETE;
+            break;
+          case "battle_win":
+            tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.BATTLE_WIN;
+            break;
+          case "daily_login":
+            tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.DAILY_LOGIN;
+            break;
+          case "clone_battled":
+            tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.CLONE_BATTLED;
+            break;
+          case "referral":
+            tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.REFERRAL;
+            break;
+        }
+
+        // Record mining event
+        await this.recordMiningEvent({
+          userId,
+          tokensEarned,
+          activityType,
+          battleId,
+        });
+
+        // Update wallet
+        const wallet = await this.getOrCreateUserWallet(userId);
+        const newTokenBalance = (parseFloat(wallet.tokens) + parseFloat(tokensEarned)).toFixed(8);
+        const newLifetimeEarned = (parseFloat(wallet.lifetimeEarned) + parseFloat(tokensEarned)).toFixed(8);
+
+        await this.updateWalletBalance(userId, {
+          tokens: newTokenBalance,
+        });
+
+        await db
+          .update(userWallets)
+          .set({ lifetimeEarned: newLifetimeEarned })
+          .where(eq(userWallets.userId, userId));
+
+        // Record transaction
+        const transaction = await this.recordTransaction({
+          userId,
+          type: "mining",
+          amount: tokensEarned,
+          currency: "tokens",
+          description: `Mined tokens: ${activityType}`,
+          battleId,
+        });
+
+        console.log(`💰 User ${userId} mined ${tokensEarned} tokens (${activityType})`);
+
+        return { tokens: tokensEarned, transaction };
+      },
+      { maxAttempts: 3 },
+      `awardMiningTokens for ${userId}`
+    );
+  }
+
+  // Ad revenue operations
+  async recordAdImpression(impression: InsertAdImpression): Promise<AdImpression> {
+    return withRetry(
+      async () => {
+        const [record] = await db
+          .insert(adImpressions)
+          .values([impression])
+          .returning();
+
+        // Update clone owner's wallet
+        const cloneOwnerId = impression.cloneOwnerId || "";
+        const wallet = await this.getOrCreateUserWallet(cloneOwnerId);
+        const revenueShare = impression.revenueShare || "0.00";
+        const newAdRevenue = (parseFloat(wallet.cloneAdRevenue) + parseFloat(revenueShare)).toFixed(2);
+        const newImpressions = wallet.totalAdImpressions + 1;
+
+        await db
+          .update(userWallets)
+          .set({
+            cloneAdRevenue: newAdRevenue,
+            totalAdImpressions: newImpressions,
+            updatedAt: new Date(),
+          })
+          .where(eq(userWallets.userId, cloneOwnerId));
+
+        // Record revenue transaction
+        await this.recordTransaction({
+          userId: cloneOwnerId,
+          type: "ad_revenue",
+          amount: revenueShare,
+          currency: "usd",
+          description: "Ad revenue from clone battle",
+          battleId: impression.battleId,
+          relatedUserId: impression.viewerId,
+        });
+
+        console.log(`📺 Ad revenue: ${cloneOwnerId} earned $${revenueShare} from ad`);
+
+        return record;
+      },
+      { maxAttempts: 3 },
+      `recordAdImpression for battle ${impression.battleId || "unknown"}`
+    );
+  }
+
+  async getCloneAdRevenue(cloneOwnerId: string): Promise<{ totalRevenue: string; impressions: number }> {
+    try {
+      const wallet = await this.getOrCreateUserWallet(cloneOwnerId);
+
+      return {
+        totalRevenue: wallet.cloneAdRevenue,
+        impressions: wallet.totalAdImpressions,
+      };
+    } catch (error) {
+      console.error('Error fetching clone ad revenue:', error);
+      throw error;
+    }
+  }
+
+  // Battle monetization
+  async deductBattleCredits(userId: string, amount: number): Promise<boolean> {
+    return withRetry(
+      async () => {
+        const wallet = await this.getOrCreateUserWallet(userId);
+
+        if (wallet.battleCredits < amount) {
+          console.log(`❌ User ${userId} has insufficient credits: ${wallet.battleCredits} < ${amount}`);
+          return false;
+        }
+
+        const newBalance = wallet.battleCredits - amount;
+        await this.updateWalletBalance(userId, { battleCredits: newBalance });
+
+        // Record transaction
+        await this.recordTransaction({
+          userId,
+          type: "battle_cost",
+          amount: amount.toString(),
+          currency: "credits",
+          description: `Spent credits to start battle`,
+        });
+
+        console.log(`💳 User ${userId} spent ${amount} credits, new balance: ${newBalance}`);
+
+        return true;
+      },
+      { maxAttempts: 3 },
+      `deductBattleCredits for ${userId}`
+    );
+  }
+
+  async awardBattleRewards(userId: string, battleId: string, didWin: boolean): Promise<void> {
+    return withRetry(
+      async () => {
+        const wallet = await this.getOrCreateUserWallet(userId);
+
+        // Award completion tokens
+        await this.awardMiningTokens(userId, "battle_complete", battleId);
+
+        if (didWin) {
+          // Award win bonus tokens
+          await this.awardMiningTokens(userId, "battle_win", battleId);
+
+          // Award credits for winning
+          const creditsEarned = MONETIZATION_CONFIG.CREDIT_REWARDS.BATTLE_WIN;
+          const newBalance = wallet.battleCredits + creditsEarned;
+
+          await this.updateWalletBalance(userId, { battleCredits: newBalance });
+
+          await this.recordTransaction({
+            userId,
+            type: "battle_win",
+            amount: creditsEarned.toString(),
+            currency: "credits",
+            description: `Won battle reward`,
+            battleId,
+          });
+
+          console.log(`🏆 User ${userId} won battle! Earned ${creditsEarned} credits`);
+        }
+      },
+      { maxAttempts: 3 },
+      `awardBattleRewards for ${userId}`
+    );
+  }
+
+  // Arc Blockchain operations (Hackathon feature!)
+  async getOrCreateArcWallet(userId: string, walletAddress: string): Promise<ArcWallet> {
+    return withRetry(
+      async () => {
+        const existing = await this.getArcWallet(userId);
+        if (existing) return existing;
+
+        const [wallet] = await db
+          .insert(arcWallets)
+          .values({
+            userId,
+            walletAddress,
+          })
+          .returning();
+
+        console.log(`⛓️ Created Arc wallet for user ${userId}: ${walletAddress}`);
+        return wallet;
+      },
+      { maxAttempts: 3 },
+      `getOrCreateArcWallet for ${userId}`
+    );
+  }
+
+  async getArcWallet(userId: string): Promise<ArcWallet | undefined> {
+    const [wallet] = await db
+      .select()
+      .from(arcWallets)
+      .where(eq(arcWallets.userId, userId));
+    return wallet;
+  }
+
+  async updateArcWalletBalance(userId: string, updates: {
+    usdcBalance?: string;
+    lifetimeEarned?: string;
+  }): Promise<ArcWallet> {
+    return withRetry(
+      async () => {
+        // First, check if wallet exists
+        const existing = await this.getArcWallet(userId);
+
+        if (!existing) {
+          throw new Error(`Arc wallet not found for user ${userId}. Create wallet first using getOrCreateArcWallet.`);
+        }
+
+        const [wallet] = await db
+          .update(arcWallets)
+          .set({
+            ...updates,
+            lastSyncedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(arcWallets.userId, userId))
+          .returning();
+
+        if (!wallet) {
+          throw new Error(`Failed to update Arc wallet for user ${userId}`);
+        }
+
+        console.log(`⛓️ Updated Arc wallet for ${userId}: USDC=${updates.usdcBalance || 'unchanged'}`);
+        return wallet;
+      },
+      { maxAttempts: 3 },
+      `updateArcWalletBalance for ${userId}`
+    );
+  }
+
+  async recordArcTransaction(transaction: InsertArcTransaction): Promise<ArcTransaction> {
+    return withRetry(
+      async () => {
+        const [tx] = await db
+          .insert(arcTransactions)
+          .values(transaction)
+          .returning();
+
+        console.log(`⛓️ Recorded Arc transaction: ${tx.type} ${tx.amount} USDC for user ${tx.userId}`);
+        return tx;
+      },
+      { maxAttempts: 3 },
+      `recordArcTransaction`
+    );
+  }
+
+  async getUserArcTransactions(userId: string, limit: number = 20): Promise<ArcTransaction[]> {
+    const txs = await db
+      .select()
+      .from(arcTransactions)
+      .where(eq(arcTransactions.userId, userId))
+      .orderBy(desc(arcTransactions.createdAt))
+      .limit(limit);
+
+    return txs;
+  }
+
+  async updateArcTransactionStatus(
+    txId: string, 
+    status: string, 
+    txHash?: string, 
+    blockNumber?: number
+  ): Promise<ArcTransaction> {
+    return withRetry(
+      async () => {
+        const [tx] = await db
+          .update(arcTransactions)
+          .set({
+            status,
+            txHash,
+            blockNumber,
+            confirmedAt: status === 'confirmed' ? new Date() : undefined,
+          })
+          .where(eq(arcTransactions.id, txId))
+          .returning();
+
+        console.log(`⛓️ Updated Arc transaction ${txId}: ${status}`);
+        return tx;
+      },
+      { maxAttempts: 3 },
+      `updateArcTransactionStatus for ${txId}`
+    );
+  }
+
+  // Voice Command operations (Hackathon feature!)
+  async recordVoiceCommand(command: InsertVoiceCommand): Promise<VoiceCommand> {
+    return withRetry(
+      async () => {
+        const [cmd] = await db
+          .insert(voiceCommands)
+          .values(command)
+          .returning();
+
+        console.log(`🎤 Recorded voice command: "${cmd.commandText}" with intent ${cmd.intent}`);
+        return cmd;
+      },
+      { maxAttempts: 3 },
+      `recordVoiceCommand`
+    );
+  }
+
+  async getUserVoiceCommands(userId: string, limit: number = 20): Promise<VoiceCommand[]> {
+    const commands = await db
+      .select()
+      .from(voiceCommands)
+      .where(eq(voiceCommands.userId, userId))
+      .orderBy(desc(voiceCommands.createdAt))
+      .limit(limit);
+
+    return commands;
+  }
+
+  async updateVoiceCommand(commandId: string, updates: {
+    status?: string;
+    arcTransactionId?: string;
+    errorMessage?: string;
+    audioUrl?: string;
+    executedAt?: Date;
+  }): Promise<VoiceCommand> {
+    return withRetry(
+      async () => {
+        const [cmd] = await db
+          .update(voiceCommands)
+          .set(updates)
+          .where(eq(voiceCommands.id, commandId))
+          .returning();
+
+        console.log(`🎤 Updated voice command ${commandId}: ${updates.status || 'updated'}`);
+        return cmd;
+      },
+      { maxAttempts: 3 },
+      `updateVoiceCommand for ${commandId}`
+    );
+  }
+
+  // ===========================
+  // PvP Battle Invite operations
+  // ===========================
+
+  async createBattleInvite(invite: InsertBattleInvite): Promise<BattleInvite> {
+    return withRetry(
+      async () => {
+        const [created] = await db
+          .insert(battleInvites)
+          .values(invite)
+          .returning();
+
+        console.log(`⚔️ Created PvP battle invite from ${invite.challengerId} to ${invite.opponentId}`);
+        return created;
+      },
+      { maxAttempts: 3 },
+      `createBattleInvite`
+    );
+  }
+
+  async getBattleInvite(id: string): Promise<BattleInvite | undefined> {
+    const [invite] = await db
+      .select()
+      .from(battleInvites)
+      .where(eq(battleInvites.id, id));
+    return invite;
+  }
+
+  async getUserBattleInvites(userId: string, type: 'sent' | 'received' | 'all'): Promise<BattleInvite[]> {
+    let query = db.select().from(battleInvites);
+
+    if (type === 'sent') {
+      query = query.where(eq(battleInvites.challengerId, userId));
+    } else if (type === 'received') {
+      query = query.where(eq(battleInvites.opponentId, userId));
+    } else {
+      query = query.where(
+        sql`${battleInvites.challengerId} = ${userId} OR ${battleInvites.opponentId} = ${userId}`
       );
     }
 
-    async forfeitPvPBattle(battleId: string, userId: string): Promise<void> {
-      return withRetry(
-        async () => {
-          const battle = await this.getBattle(battleId);
-          if (!battle) {
-            throw new Error(`Battle ${battleId} not found`);
+    const invites = await query
+      .orderBy(desc(battleInvites.createdAt))
+      .limit(50);
+
+    return invites;
+  }
+
+  async updateBattleInviteStatus(inviteId: string, status: string, battleId?: string): Promise<BattleInvite> {
+    return withRetry(
+      async () => {
+        const [updated] = await db
+          .update(battleInvites)
+          .set({
+            status,
+            battleId,
+            updatedAt: new Date(),
+          })
+          .where(eq(battleInvites.id, inviteId))
+          .returning();
+
+        console.log(`⚔️ Updated battle invite ${inviteId}: ${status}`);
+        return updated;
+      },
+      { maxAttempts: 3 },
+      `updateBattleInviteStatus`
+    );
+  }
+
+  async expireOldInvites(): Promise<void> {
+    await db
+      .update(battleInvites)
+      .set({ status: 'expired', updatedAt: new Date() })
+      .where(
+        and(
+          eq(battleInvites.status, 'pending'),
+          lt(battleInvites.expiresAt, new Date())
+        )
+      );
+
+    console.log(`⚔️ Expired old pending battle invites`);
+  }
+
+  // ===========================
+  // PvP Round Submission operations
+  // ===========================
+
+  async createRoundSubmission(submission: InsertBattleRoundSubmission): Promise<BattleRoundSubmission> {
+    return withRetry(
+      async () => {
+        const [created] = await db
+          .insert(battleRoundSubmissions)
+          .values(submission)
+          .returning();
+
+        console.log(`⚔️ Created round submission: Battle ${submission.battleId}, Round ${submission.roundNumber}, User ${submission.userId}`);
+        return created;
+      },
+      { maxAttempts: 3 },
+      `createRoundSubmission`
+    );
+  }
+
+  async getRoundSubmissions(battleId: string, roundNumber: number): Promise<BattleRoundSubmission[]> {
+    const submissions = await db
+      .select()
+      .from(battleRoundSubmissions)
+      .where(
+        and(
+          eq(battleRoundSubmissions.battleId, battleId),
+          eq(battleRoundSubmissions.roundNumber, roundNumber)
+        )
+      );
+
+    return submissions;
+  }
+
+  async checkBothSubmissionsExist(battleId: string, roundNumber: number): Promise<boolean> {
+    const submissions = await this.getRoundSubmissions(battleId, roundNumber);
+    return submissions.length === 2;
+  }
+
+  async processPvPRound(battleId: string, roundNumber: number): Promise<void> {
+    return withRetry(
+      async () => {
+        const submissions = await this.getRoundSubmissions(battleId, roundNumber);
+
+        if (submissions.length !== 2) {
+          throw new Error(`Cannot process round: Expected 2 submissions, got ${submissions.length}`);
+        }
+
+        // Get battle to determine roles
+        const battle = await this.getBattle(battleId);
+        if (!battle) {
+          throw new Error(`Battle ${battleId} not found`);
+        }
+
+        // Calculate cumulative scores
+        const challengerSubmission = submissions.find(s => s.userId === battle.challengerUserId);
+        const opponentSubmission = submissions.find(s => s.userId === battle.opponentUserId);
+
+        if (!challengerSubmission || !opponentSubmission) {
+          throw new Error('Could not find submissions for both players');
+        }
+
+        const challengerRoundScore = challengerSubmission.scores?.totalScore || 0;
+        const opponentRoundScore = opponentSubmission.scores?.totalScore || 0;
+
+        // Update cumulative battle scores
+        const newChallengerScore = (battle.challengerScore || 0) + challengerRoundScore;
+        const newOpponentScore = (battle.opponentScore || 0) + opponentRoundScore;
+
+        await this.updatePvPBattleScores(battleId, newChallengerScore, newOpponentScore);
+
+        // Check if battle is complete
+        if (roundNumber >= (battle.maxRounds || 5)) {
+          const winnerId = newChallengerScore > newOpponentScore 
+            ? battle.challengerUserId 
+            : newOpponentScore > newChallengerScore 
+              ? battle.opponentUserId 
+              : null; // tie
+
+          if (winnerId) {
+            await this.completePvPBattle(battleId, winnerId);
+          } else {
+            // Handle tie - mark as completed without winner
+            await db
+              .update(battles)
+              .set({
+                status: 'completed',
+                completedAt: new Date(),
+              })
+              .where(eq(battles.id, battleId));
           }
+        }
 
-          // Determine winner (the other player)
-          const winnerId = battle.challengerUserId === userId 
-            ? battle.opponentUserId 
-            : battle.challengerUserId;
+        console.log(`⚔️ Processed PvP round ${roundNumber} for battle ${battleId}`);
+      },
+      { maxAttempts: 3 },
+      `processPvPRound`
+    );
+  }
 
-          await db
-            .update(battles)
-            .set({
-              status: 'completed',
-              winnerUserId: winnerId,
-              completedAt: new Date(),
-            })
-            .where(eq(battles.id, battleId));
+  async updatePvPBattleScores(battleId: string, challengerScore: number, opponentScore: number): Promise<void> {
+    await db
+      .update(battles)
+      .set({
+        challengerScore,
+        opponentScore,
+      })
+      .where(eq(battles.id, battleId));
 
-          console.log(`⚔️ User ${userId} forfeited battle ${battleId}, winner: ${winnerId}`);
-        },
-        { maxAttempts: 3 },
-        `forfeitPvPBattle`
+    console.log(`⚔️ Updated PvP battle scores: Challenger ${challengerScore}, Opponent ${opponentScore}`);
+  }
+
+  async completePvPBattle(battleId: string, winnerId: string): Promise<void> {
+    return withRetry(
+      async () => {
+        await db
+          .update(battles)
+          .set({
+            status: 'completed',
+            winnerUserId: winnerId,
+            completedAt: new Date(),
+          })
+          .where(eq(battles.id, battleId));
+
+        console.log(`⚔️ Completed PvP battle ${battleId}, winner: ${winnerId}`);
+      },
+      { maxAttempts: 3 },
+      `completePvPBattle`
+    );
+  }
+
+  async forfeitPvPBattle(battleId: string, userId: string): Promise<void> {
+    return withRetry(
+      async () => {
+        const battle = await this.getBattle(battleId);
+        if (!battle) {
+          throw new Error(`Battle ${battleId} not found`);
+        }
+
+        // Determine winner (the other player)
+        const winnerId = battle.challengerUserId === userId 
+          ? battle.opponentUserId 
+          : battle.challengerUserId;
+
+        await db
+          .update(battles)
+          .set({
+            status: 'completed',
+            winnerUserId: winnerId,
+            completedAt: new Date(),
+          })
+          .where(eq(battles.id, battleId));
+
+        console.log(`⚔️ User ${userId} forfeited battle ${battleId}, winner: ${winnerId}`);
+      },
+      { maxAttempts: 3 },
+      `forfeitPvPBattle`
+    );
+  }
+
+  // ===========================
+  // PvP Battle queries
+  // ===========================
+
+  async getPvPBattle(battleId: string): Promise<Battle | undefined> {
+    const [battle] = await db
+      .select()
+      .from(battles)
+      .where(
+        and(
+          eq(battles.id, battleId),
+          eq(battles.mode, 'pvp')
+        )
       );
-    }
 
-    // ===========================
-    // PvP Battle queries
-    // ===========================
+    return battle;
+  }
 
-    async getPvPBattle(battleId: string): Promise<Battle | undefined> {
-      const [battle] = await db
-        .select()
-        .from(battles)
-        .where(
-          and(
-            eq(battles.id, battleId),
-            eq(battles.mode, 'pvp')
-          )
-        );
-
-      return battle;
-    }
-
-    async getUserPvPBattles(userId: string): Promise<Battle[]> {
-      const pvpBattles = await db
-        .select()
-        .from(battles)
-        .where(
-          and(
-            eq(battles.mode, 'pvp'),
-            sql`(${battles.challengerUserId} = ${userId} OR ${battles.opponentUserId} = ${userId})`
-          )
+  async getUserPvPBattles(userId: string): Promise<Battle[]> {
+    const pvpBattles = await db
+      .select()
+      .from(battles)
+      .where(
+        and(
+          eq(battles.mode, 'pvp'),
+          sql`(${battles.challengerUserId} = ${userId} OR ${battles.opponentUserId} = ${userId})`
         )
-        .orderBy(desc(battles.createdAt))
-        .limit(50);
+      )
+      .orderBy(desc(battles.createdAt))
+      .limit(50);
 
-      return pvpBattles;
-    }
+    return pvpBattles;
+  }
 
-    async getActivePvPBattles(userId: string): Promise<Battle[]> {
-      const activeBattles = await db
-        .select()
-        .from(battles)
-        .where(
-          and(
-            eq(battles.mode, 'pvp'),
-            eq(battles.status, 'active'),
-            sql`(${battles.challengerUserId} = ${userId} OR ${battles.opponentUserId} = ${userId})`
-          )
+  async getActivePvPBattles(userId: string): Promise<Battle[]> {
+    const activeBattles = await db
+      .select()
+      .from(battles)
+      .where(
+        and(
+          eq(battles.mode, 'pvp'),
+          eq(battles.status, 'active'),
+          sql`(${battles.challengerUserId} = ${userId} OR ${battles.opponentUserId} = ${userId})`
         )
-        .orderBy(desc(battles.createdAt));
+      )
+      .orderBy(desc(battles.createdAt));
 
-      return activeBattles;
+    return activeBattles;
+  }
+
+  // User Profile Picture operations (Hackathon AI face-swap feature!)
+  async createProfilePicture(data: InsertUserProfilePicture): Promise<UserProfilePicture> {
+    const [picture] = await db
+      .insert(userProfilePictures)
+      .values(data)
+      .returning();
+
+    return picture;
+  }
+
+  async getUserProfilePictures(userId: string): Promise<UserProfilePicture[]> {
+    const pictures = await db
+      .select()
+      .from(userProfilePictures)
+      .where(eq(userProfilePictures.userId, userId))
+      .orderBy(desc(userProfilePictures.createdAt));
+
+    return pictures;
+  }
+
+  async getActiveProfilePicture(userId: string): Promise<UserProfilePicture | undefined> {
+    const [picture] = await db
+      .select()
+      .from(userProfilePictures)
+      .where(
+        and(
+          eq(userProfilePictures.userId, userId),
+          eq(userProfilePictures.isActive, true)
+        )
+      );
+
+    return picture;
+  }
+
+  async updateProfilePictureStatus(id: string, status: string, generatedImageUrl?: string): Promise<UserProfilePicture> {
+    const updateData: any = { status, updatedAt: new Date() };
+    if (generatedImageUrl) {
+      updateData.generatedImageUrl = generatedImageUrl;
     }
 
-    // User Profile Picture operations (Hackathon AI face-swap feature!)
-    async createProfilePicture(data: InsertUserProfilePicture): Promise<UserProfilePicture> {
-      const [picture] = await db
-        .insert(userProfilePictures)
-        .values(data)
-        .returning();
+    const [picture] = await db
+      .update(userProfilePictures)
+      .set(updateData)
+      .where(eq(userProfilePictures.id, id))
+      .returning();
 
-      return picture;
+    return picture;
+  }
+
+  async setActiveProfilePicture(userId: string, pictureId: string): Promise<UserProfilePicture> {
+    // Deactivate all other profile pictures for this user
+    await db
+      .update(userProfilePictures)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(userProfilePictures.userId, userId));
+
+    // Activate the selected picture
+    const [picture] = await db
+      .update(userProfilePictures)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(eq(userProfilePictures.id, pictureId))
+      .returning();
+
+    // Update user's profileImageUrl
+    if (picture.generatedImageUrl) {
+      await this.updateUser(userId, { profileImageUrl: picture.generatedImageUrl });
     }
 
-    async getUserProfilePictures(userId: string): Promise<UserProfilePicture[]> {
-      const pictures = await db
-        .select()
-        .from(userProfilePictures)
-        .where(eq(userProfilePictures.userId, userId))
-        .orderBy(desc(userProfilePictures.createdAt));
-
-      return pictures;
-    }
-
-    async getActiveProfilePicture(userId: string): Promise<UserProfilePicture | undefined> {
-      const [picture] = await db
-        .select()
-        .from(userProfilePictures)
-        .where(
-          and(
-            eq(userProfilePictures.userId, userId),
-            eq(userProfilePictures.isActive, true)
-          )
-        );
-
-      return picture;
-    }
-
-    async updateProfilePictureStatus(id: string, status: string, generatedImageUrl?: string): Promise<UserProfilePicture> {
-      const updateData: any = { status, updatedAt: new Date() };
-      if (generatedImageUrl) {
-        updateData.generatedImageUrl = generatedImageUrl;
-      }
-
-      const [picture] = await db
-        .update(userProfilePictures)
-        .set(updateData)
-        .where(eq(userProfilePictures.id, id))
-        .returning();
-
-      return picture;
-    }
-
-    async setActiveProfilePicture(userId: string, pictureId: string): Promise<UserProfilePicture> {
-      // Deactivate all other profile pictures for this user
-      await db
-        .update(userProfilePictures)
-        .set({ isActive: false, updatedAt: new Date() })
-        .where(eq(userProfilePictures.userId, userId));
-
-      // Activate the selected picture
-      const [picture] = await db
-        .update(userProfilePictures)
-        .set({ isActive: true, updatedAt: new Date() })
-        .where(eq(userProfilePictures.id, pictureId))
-        .returning();
-
-      // Update user's profileImageUrl
-      if (picture.generatedImageUrl) {
-        await this.updateUser(userId, { profileImageUrl: picture.generatedImageUrl });
-      }
-
-      return picture;
-    }
+    return picture;
+  }
   }
 
 export const storage = new DatabaseStorage();

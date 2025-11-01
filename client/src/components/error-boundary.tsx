@@ -6,17 +6,18 @@ import { AlertTriangle, RefreshCw } from 'lucide-react';
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
+  onReset?: () => void; // Added for reset callback
 }
 
 interface State {
   hasError: boolean;
-  error?: Error;
+  error?: Error | null; // Allow error to be null for reset
 }
 
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, error: null };
   }
 
   static getDerivedStateFromError(error: Error): State {
@@ -25,7 +26,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught an error:', error, errorInfo);
-    
+
+    // Auto-recover from null reference errors after a delay
+    if (error.message.includes('null') || error.message.includes('undefined')) {
+      setTimeout(() => {
+        this.setState({ hasError: false, error: null });
+      }, 2000);
+    }
+
     // In production, you could send this to an error reporting service
     if (process.env.NODE_ENV === 'production') {
       // Example: reportError(error, errorInfo);
@@ -33,7 +41,10 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: undefined });
+    this.setState({ hasError: false, error: null });
+    if (this.props.onReset) {
+      this.props.onReset();
+    }
   };
 
   render() {
@@ -60,14 +71,14 @@ export class ErrorBoundary extends Component<Props, State> {
                   {this.state.error.message}
                 </div>
               )}
-              <Button 
+              <Button
                 onClick={this.handleReset}
                 className="w-full bg-cyber-red hover:bg-red-700"
               >
                 <RefreshCw className="w-4 h-4 mr-2" />
                 Try again
               </Button>
-              <Button 
+              <Button
                 variant="outline"
                 onClick={() => window.location.reload()}
                 className="w-full border-gray-600 text-gray-300"

@@ -80,22 +80,24 @@ function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <div className="min-h-screen bg-gradient-to-br from-primary-dark via-secondary-dark to-primary-dark">
-            <Toaster />
-            <SponsoredBanner interval={25000} enabled={true} />
-            <InstallPrompt />
-            <AudioAutoplayGate 
-              showDetailedInstructions={true}
-              onAudioUnlocked={() => {
-                console.log('🎵 Global audio unlocked - all auto-play features enabled');
-              }}
-            />
-            <ErrorBoundary>
-              <Router />
-            </ErrorBoundary>
-          </div>
-        </TooltipProvider>
+        <ErrorBoundary>
+          <TooltipProvider>
+            <div className="min-h-screen bg-gradient-to-br from-primary-dark via-secondary-dark to-primary-dark">
+              <Toaster />
+              <SponsoredBanner interval={25000} enabled={true} />
+              <InstallPrompt />
+              <AudioAutoplayGate 
+                showDetailedInstructions={true}
+                onAudioUnlocked={() => {
+                  console.log('🎵 Global audio unlocked - all auto-play features enabled');
+                }}
+              />
+              <ErrorBoundary>
+                <Router />
+              </ErrorBoundary>
+            </div>
+          </TooltipProvider>
+        </ErrorBoundary>
       </QueryClientProvider>
     </ErrorBoundary>
   );

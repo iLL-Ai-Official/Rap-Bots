@@ -121,8 +121,8 @@ export async function setupAuth(app: Express) {
     console.log(`✅ Registered auth strategy: replitauth:${domain}`);
   }
 
-  passport.serializeUser((user: Express.User, cb) => cb(null, user));
-  passport.deserializeUser((user: Express.User, cb) => cb(null, user));
+  passport.serializeUser((user: Express.User, cb: (err: any, id?: Express.User) => void) => cb(null, user));
+  passport.deserializeUser((user: Express.User, cb: (err: any, user?: Express.User | false | null) => void) => cb(null, user));
 
   app.get("/api/login", (req, res, next) => {
     passport.authenticate(`replitauth:${req.hostname}`, {
@@ -164,7 +164,7 @@ export async function setupAuth(app: Express) {
   });
 
   app.get("/api/logout", (req, res) => {
-    req.logout(() => {
+    req.logout((err: any) => {
       res.redirect(
         client.buildEndSessionUrl(config, {
           client_id: process.env.REPL_ID!,

@@ -2155,6 +2155,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'Battle ID is required' });
       }
 
+      // Check if battle was paid (credits deducted) - only paid battles earn Arc USDC
+      const battle = await storage.getBattle(battleId);
+      if (!battle) {
+        return res.status(404).json({ message: 'Battle not found' });
+      }
+
+      if (!battle.creditsPaid) {
+        console.log(`🚫 User ${userId} attempted to claim USDC for free battle ${battleId}`);
+        return res.status(403).json({ 
+          message: 'Free battles do not earn Arc USDC. Purchase credits to earn rewards!',
+          requiresCredits: true 
+        });
+      }
+
       // Get user's Arc wallet
       const wallet = await storage.getArcWallet(userId);
       if (!wallet) {
@@ -2186,7 +2200,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lifetimeEarned: (parseFloat(wallet.lifetimeEarned) + 0.10).toFixed(6),
       });
 
-      console.log(`🏆 Awarded 0.10 USDC to user ${userId} for battle ${battleId}`);
+      console.log(`🏆 Awarded 0.10 USDC to user ${userId} for PAID battle ${battleId}`);
 
       res.json({
         success: true,

@@ -306,6 +306,17 @@ export class DatabaseStorage implements IStorage {
         // Check and reset daily battles if needed
         await this.canUserStartBattle(battleData.userId);
 
+        // Try to deduct credits for paid battle (Arc USDC eligibility)
+        let creditsPaid = false;
+        const wallet = await this.getOrCreateUserWallet(battleData.userId);
+        if (wallet.battleCredits >= MONETIZATION_CONFIG.BATTLE_COST_CREDITS) {
+          const deducted = await this.deductBattleCredits(battleData.userId, MONETIZATION_CONFIG.BATTLE_COST_CREDITS);
+          if (deducted) {
+            creditsPaid = true;
+            console.log(`💳 User ${battleData.userId} paid ${MONETIZATION_CONFIG.BATTLE_COST_CREDITS} credits for battle - eligible for Arc USDC rewards`);
+          }
+        }
+
         // Decrement user's daily battles (except for Pro users)
         if (user.subscriptionTier !== "pro") {
           const updatedUser = await this.getUser(battleData.userId); // Get fresh user data after potential reset
@@ -332,9 +343,13 @@ export class DatabaseStorage implements IStorage {
             .where(eq(users.id, battleData.userId));
         }
 
+        // Include creditsPaid in battle data for Arc USDC reward eligibility
         const [battle] = await db
           .insert(battles)
-          .values(battleData)
+          .values({
+            ...battleData,
+            creditsPaid
+          })
           .returning();
         return battle;
       },

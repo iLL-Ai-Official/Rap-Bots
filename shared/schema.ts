@@ -437,6 +437,73 @@ export const adImpressions = pgTable("ad_impressions", {
   index("idx_ad_impressions_created_at").on(table.createdAt),
 ]);
 
+// Arc Blockchain Wallets - USDC on Circle's Arc L1
+export const arcWallets = pgTable("arc_wallets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull().unique(),
+  walletAddress: varchar("wallet_address", { length: 42 }).notNull().unique(), // Ethereum-compatible address
+  usdcBalance: decimal("usdc_balance", { precision: 18, scale: 6 }).notNull().default("0.000000"), // USDC balance
+  lifetimeEarned: decimal("lifetime_earned", { precision: 18, scale: 6 }).notNull().default("0.000000"), // Total USDC earned
+  lifetimeWithdrawn: decimal("lifetime_withdrawn", { precision: 18, scale: 6 }).notNull().default("0.000000"), // Total USDC withdrawn
+  lastSyncedAt: timestamp("last_synced_at"), // Last time balance was synced from blockchain
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_arc_wallets_user_id").on(table.userId),
+  index("idx_arc_wallets_address").on(table.walletAddress),
+]);
+
+// Arc Blockchain Transactions - USDC payments on Arc L1
+export const arcTransactions = pgTable("arc_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  txHash: varchar("tx_hash", { length: 66 }).unique(), // Blockchain transaction hash
+  type: varchar("type").notNull(), // battle_reward, prize_payout, withdrawal, deposit, voice_command
+  amount: decimal("amount", { precision: 18, scale: 6 }).notNull(),
+  fromAddress: varchar("from_address", { length: 42 }),
+  toAddress: varchar("to_address", { length: 42 }),
+  status: varchar("status").notNull().default("pending"), // pending, confirmed, failed
+  battleId: varchar("battle_id").references(() => battles.id),
+  voiceCommandText: text("voice_command_text"), // Original voice command that triggered this transaction
+  gasUsedUSDC: decimal("gas_used_usdc", { precision: 10, scale: 6 }), // Gas cost in USDC (Arc native gas)
+  blockNumber: integer("block_number"),
+  confirmedAt: timestamp("confirmed_at"),
+  metadata: jsonb("metadata").$type<{
+    circleTransferId?: string;
+    errorMessage?: string;
+    retryCount?: number;
+  }>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_arc_tx_user_id").on(table.userId),
+  index("idx_arc_tx_hash").on(table.txHash),
+  index("idx_arc_tx_status").on(table.status),
+  index("idx_arc_tx_created_at").on(table.createdAt),
+]);
+
+// Voice Command History - Track voice-to-blockchain commands for hackathon demo
+export const voiceCommands = pgTable("voice_commands", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  commandText: text("command_text").notNull(), // Transcribed voice command
+  intent: varchar("intent").notNull(), // send_usdc, check_balance, battle_payout, withdraw, etc.
+  parameters: jsonb("parameters").$type<{
+    amount?: string;
+    recipient?: string;
+    battleId?: string;
+    [key: string]: any;
+  }>(),
+  arcTransactionId: varchar("arc_transaction_id").references(() => arcTransactions.id),
+  status: varchar("status").notNull().default("processing"), // processing, executed, failed, cancelled
+  errorMessage: text("error_message"),
+  audioUrl: text("audio_url"), // ElevenLabs audio confirmation URL
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  executedAt: timestamp("executed_at"),
+}, (table) => [
+  index("idx_voice_commands_user_id").on(table.userId),
+  index("idx_voice_commands_created_at").on(table.createdAt),
+]);
+
 // Insert schemas
 export const insertUserWalletSchema = createInsertSchema(userWallets).omit({
   id: true,
@@ -459,6 +526,22 @@ export const insertAdImpressionSchema = createInsertSchema(adImpressions).omit({
   createdAt: true,
 });
 
+export const insertArcWalletSchema = createInsertSchema(arcWallets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertArcTransactionSchema = createInsertSchema(arcTransactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertVoiceCommandSchema = createInsertSchema(voiceCommands).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Type exports
 export type InsertUserWallet = z.infer<typeof insertUserWalletSchema>;
 export type UserWallet = typeof userWallets.$inferSelect;
@@ -468,6 +551,12 @@ export type InsertMiningEvent = z.infer<typeof insertMiningEventSchema>;
 export type MiningEvent = typeof miningEvents.$inferSelect;
 export type InsertAdImpression = z.infer<typeof insertAdImpressionSchema>;
 export type AdImpression = typeof adImpressions.$inferSelect;
+export type InsertArcWallet = z.infer<typeof insertArcWalletSchema>;
+export type ArcWallet = typeof arcWallets.$inferSelect;
+export type InsertArcTransaction = z.infer<typeof insertArcTransactionSchema>;
+export type ArcTransaction = typeof arcTransactions.$inferSelect;
+export type InsertVoiceCommand = z.infer<typeof insertVoiceCommandSchema>;
+export type VoiceCommand = typeof voiceCommands.$inferSelect;
 
 // Monetization constants
 export const MONETIZATION_CONFIG = {
@@ -504,4 +593,28 @@ export const MONETIZATION_CONFIG = {
     { credits: 1000, price: 6.99, bonus: 150 },
     { credits: 5000, price: 24.99, bonus: 1000 },
   ],
+  
+  // Arc blockchain USDC rewards (Hackathon feature!)
+  ARC_REWARDS: {
+    BATTLE_WIN_USDC: "0.10", // $0.10 USDC for winning a battle
+    TOURNAMENT_1ST: "50.00", // $50 USDC for 1st place
+    TOURNAMENT_2ND: "25.00", // $25 USDC for 2nd place
+    TOURNAMENT_3RD: "10.00", // $10 USDC for 3rd place
+    DAILY_CHALLENGE: "1.00", // $1 USDC for completing daily challenge
+    VOICE_COMMAND_REWARD: "0.05", // $0.05 USDC for successful voice command
+  },
+} as const;
+
+// ElevenLabs API constants for hackathon
+export const ELEVENLABS_CONFIG = {
+  BASE_URL: "https://api.elevenlabs.io/v1",
+  DEFAULT_MODEL: "eleven_flash_v2_5", // Ultra-fast for real-time (75ms latency)
+  BATTLE_MODEL: "eleven_turbo_v2_5", // Balanced quality/speed for battles
+  DRAMATIC_MODEL: "eleven_multilingual_v2", // High quality for dramatic moments
+  VOICE_SETTINGS: {
+    stability: 0.5,
+    similarity_boost: 0.75,
+    speed: 1.0,
+    use_speaker_boost: true,
+  },
 } as const;

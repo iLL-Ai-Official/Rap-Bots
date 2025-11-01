@@ -2757,6 +2757,145 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Profile Picture Face-Swap API (Hackathon AI feature!)
+  // Upload user photo and generate AI face-swapped rapper avatar
+  app.post('/api/profile-pictures/upload', isAuthenticated, upload.single('photo'), async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const file = req.file;
+      
+      if (!file) {
+        return res.status(400).json({ message: 'No photo uploaded' });
+      }
+
+      // Validate file type
+      const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+      if (!allowedMimeTypes.includes(file.mimetype)) {
+        return res.status(400).json({ message: 'Invalid file type. Only JPEG and PNG are allowed' });
+      }
+
+      // Convert uploaded file to data URL for storage
+      const base64Image = file.buffer.toString('base64');
+      const originalPhotoUrl = `data:${file.mimetype};base64,${base64Image}`;
+
+      // Create profile picture record
+      const picture = await storage.createProfilePicture({
+        userId,
+        originalPhotoUrl,
+        status: 'processing',
+        isActive: false,
+      });
+
+      console.log(`📸 Created profile picture record ${picture.id} for user ${userId}`);
+
+      // Generate face-swapped version in background
+      // Using a default rapper template image
+      const templateImage = 'https://via.placeholder.com/512/000000/FFFFFF/?text=Rapper+Template'; // TODO: Use real rapper template
+      
+      try {
+        // Import the Hugging Face service
+        const { huggingFaceService } = await import('./services/huggingface');
+        
+        if (!huggingFaceService.isConfigured()) {
+          // Update status to failed if HF not configured
+          await storage.updateProfilePictureStatus(picture.id, 'failed');
+          return res.status(503).json({ 
+            message: 'Hugging Face service not configured',
+            pictureId: picture.id,
+          });
+        }
+
+        // Generate face swap (this may take a few seconds)
+        const generatedImageUrl = await huggingFaceService.faceSwapFromBuffers(
+          file.buffer,
+          Buffer.from('placeholder') // TODO: Load actual rapper template
+        );
+
+        // Update with generated image
+        await storage.updateProfilePictureStatus(picture.id, 'completed', generatedImageUrl);
+
+        console.log(`✅ Face swap completed for picture ${picture.id}`);
+
+        res.json({
+          success: true,
+          picture: {
+            id: picture.id,
+            status: 'completed',
+            generatedImageUrl,
+          },
+        });
+      } catch (error: any) {
+        console.error('🔴 Face swap generation failed:', error);
+        await storage.updateProfilePictureStatus(picture.id, 'failed');
+        
+        res.status(500).json({
+          message: 'Face swap generation failed',
+          error: error.message,
+          pictureId: picture.id,
+        });
+      }
+    } catch (error: any) {
+      console.error('Error uploading profile picture:', error);
+      res.status(500).json({ message: 'Failed to upload profile picture', error: error.message });
+    }
+  });
+
+  // Get all profile pictures for current user
+  app.get('/api/profile-pictures', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pictures = await storage.getUserProfilePictures(userId);
+      res.json(pictures);
+    } catch (error: any) {
+      console.error('Error getting profile pictures:', error);
+      res.status(500).json({ message: 'Failed to get profile pictures', error: error.message });
+    }
+  });
+
+  // Get active profile picture
+  app.get('/api/profile-pictures/active', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const picture = await storage.getActiveProfilePicture(userId);
+      res.json(picture || null);
+    } catch (error: any) {
+      console.error('Error getting active profile picture:', error);
+      res.status(500).json({ message: 'Failed to get active profile picture', error: error.message });
+    }
+  });
+
+  // Set a profile picture as active
+  app.post('/api/profile-pictures/:id/activate', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const pictureId = req.params.id;
+
+      // Verify user owns this picture
+      const pictures = await storage.getUserProfilePictures(userId);
+      const picture = pictures.find(p => p.id === pictureId);
+      
+      if (!picture) {
+        return res.status(404).json({ message: 'Profile picture not found' });
+      }
+
+      if (picture.status !== 'completed') {
+        return res.status(400).json({ message: 'Cannot activate incomplete profile picture' });
+      }
+
+      const activatedPicture = await storage.setActiveProfilePicture(userId, pictureId);
+      
+      console.log(`✅ Activated profile picture ${pictureId} for user ${userId}`);
+      
+      res.json({
+        success: true,
+        picture: activatedPicture,
+      });
+    } catch (error: any) {
+      console.error('Error activating profile picture:', error);
+      res.status(500).json({ message: 'Failed to activate profile picture', error: error.message });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

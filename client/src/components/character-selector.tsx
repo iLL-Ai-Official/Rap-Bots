@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { BATTLE_CHARACTERS, type BattleCharacter, cloneToBattleCharacter, getRandomCharacter } from "@shared/characters";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 import { Bot, Sparkles, Shuffle } from "lucide-react";
 
 interface CharacterSelectorProps {
@@ -20,12 +21,14 @@ interface UserClone {
 }
 
 export function CharacterSelector({ onCharacterSelect, selectedCharacter }: CharacterSelectorProps) {
+  const { user } = useAuth();
   const [allCharacters, setAllCharacters] = useState<BattleCharacter[]>([...BATTLE_CHARACTERS]);
 
   // Fetch user's clone
   const { data: userClone } = useQuery<UserClone>({
     queryKey: ['/api/user/clone'],
     retry: false,
+    enabled: !!user,
   });
 
   // Update character list when clone is loaded

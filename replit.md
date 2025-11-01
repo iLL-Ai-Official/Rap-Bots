@@ -16,7 +16,21 @@ The application is built with a clear separation between frontend and backend se
 
 ## Recent Changes
 
-### November 1, 2025 (Latest) - Battle System Expansion: PvP, Random Matchmaking, Profiles & Clone Battles
+### November 1, 2025 (Latest) - AI Face-Swap Profile Pictures
+- **Hugging Face Integration**: Added AI face-swap technology for personalized rapper avatars
+  - New service: huggingface.ts using felixrosberg/face-swap model
+  - 1 new database table: user_profile_pictures with status tracking (processing, completed, failed)
+  - 4 new API endpoints: upload photo, list avatars, get active, activate avatar
+  - Intelligent file validation: MIME type checking, 5MB size limit, JPEG/PNG only
+- **Profile Picture Uploader UI**: Full-featured component in Settings → Profile Avatar tab
+  - Drag-and-drop photo upload with live preview
+  - AI-generated rapper avatar gallery view
+  - One-click activation to set as profile picture
+  - Real-time status updates (processing → completed)
+- **Database**: 21 total tables (added user_profile_pictures)
+- **App Status**: Fully functional AI face cloning ready for hackathon demo
+
+### November 1, 2025 (Earlier) - Battle System Expansion: PvP, Random Matchmaking, Profiles & Clone Battles
 - **Random Opponent Selection**: Added "Random Match" button to character selector for quick battles against random AI characters
 - **User Profile Pages**: New /profile page displaying user stats, battle history, subscription tier, and Arc wallet balance
 - **Complete PvP Battle System**: Full player-vs-player battles with asynchronous turn-based gameplay

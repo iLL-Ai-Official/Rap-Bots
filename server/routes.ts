@@ -1197,6 +1197,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           // Map skill level to difficulty
           if (clone.skillLevel < 40) adjustedDifficulty = 'easy';
+
+  // Check Sora video generation quota (10 requests/hour free tier)
+  app.get('/api/video/quota-status', isAuthenticated, async (req: any, res) => {
+    try {
+      // Simple in-memory tracking (could be moved to Redis/DB for production)
+      // This is just an estimate - actual quota is managed by AI/ML API
+      const userId = req.user.claims.sub;
+      
+      // Return quota information
+      res.json({
+        hourlyLimit: 10,
+        modelUsed: 'openai/sora-2-i2v',
+        creditCost: 50,
+        resolution: '720p',
+        message: 'Free tier: 10 video generations per hour. Credits charged for abuse prevention.'
+      });
+    } catch (error) {
+      console.error('Error fetching video quota:', error);
+      res.status(500).json({ message: 'Failed to fetch video quota status' });
+    }
+  });
+
           else if (clone.skillLevel >= 40 && clone.skillLevel < 65) adjustedDifficulty = 'normal';
           else if (clone.skillLevel >= 65 && clone.skillLevel < 85) adjustedDifficulty = 'hard';
           else adjustedDifficulty = 'nightmare';

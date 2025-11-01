@@ -28,6 +28,7 @@ export const battles = pgTable("battles", {
   lyricComplexity: integer("lyric_complexity").default(50), // 0-100 complexity level
   styleIntensity: integer("style_intensity").default(50), // 0-100 style intensity level
   voiceSpeed: real("voice_speed").default(1.0), // 0.5-2.0 voice speed multiplier
+  creditsPaid: boolean("credits_paid").notNull().default(false), // Track if credits were deducted for Arc USDC rewards
   rounds: jsonb("rounds").$type<Array<{
     id: string;
     battleId: string;

@@ -1,0 +1,364 @@
+
+AI/ML API Documentation
+Ask or search…
+Ctrl
+k
+API Key
+Models
+Playground
+GitHub
+Get Support
+Quickstart
+🧭
+Documentation Map
+Setting Up
+Supported SDKs
+API REFERENCES
+📒
+All Model IDs
+Text Models (LLM)
+Alibaba Cloud
+Anthracite
+Anthropic
+Cohere
+DeepSeek
+Google
+Meta
+MiniMax
+Mistral AI
+Moonshot
+NousResearch
+NVIDIA
+OpenAI
+Perplexity
+xAI
+Zhipu
+Image Models
+Video Models
+Alibaba Cloud
+ByteDance
+Google
+Kling AI
+Krea
+Luma AI
+MiniMax
+OpenAI
+sora-2-t2v
+sora-2-i2v
+sora-2-pro-t2v
+sora-2-pro-i2v
+PixVerse
+Runway
+Sber AI
+Veed
+Music Models
+Voice/Speech Models
+Content Moderation Models
+3D-Generating Models
+Vision Models
+Embedding Models
+Solutions
+Bagoodex
+OpenAI
+Use Cases
+Create Images: Illustrate an Article
+Animate Images: A Children’s Encyclopedia
+Create an Assistant to Discuss a Specific Document
+Create a 3D Model from an Image
+Create a Looped GIF for a Web Banner
+Read Text Aloud and Describe Images: Support People with Visual Impairments
+Find Relevant Answers: Semantic Search with Text Embeddings
+Summarize Websites with AI-Powered Chrome Extension
+Capabilities
+Completion and Chat Completion
+Streaming Mode
+Code Generation
+Thinking / Reasoning
+Function Calling
+Vision in Text Models (Image-To-Text)
+Web Search
+Batch Processing
+Features of Anthropic Models
+Model comparison
+FAQ
+Can I use API in Python?
+Can I use API in NodeJS?
+What are the Pro Models?
+How to use the Free Tier?
+Are my requests cropped?
+Can I call API in the asynchronous mode?
+OpenAI SDK doesn't work?
+📞
+Contact Sales
+🗯️
+Send Feedback
+Errors and Messages
+General Info
+Errors with status code 4xx
+Errors with status code 5xx
+Glossary
+Concepts
+Integrations
+Our Integration List
+Agno
+Aider
+AutoGPT
+Cline
+continue.dev
+Cursor
+ElizaOS
+GPT Researcher (gptr)
+Langflow
+LiteLLM
+Make
+n8n
+Roo Code
+SillyTavern
+Toolhouse
+Powered by GitBook
+Setup your API Key
+How to Make a Call
+API Schemas
+Create a video generation task and send it to the server
+POST/v2/video/generations
+Retrieve the generated video from the server
+GET/v2/video/generations
+Full Example: Generating and Retrieving the Video From the Server
+Was this helpful?
+
+
+
+
+
+
+
+
+Copy
+
+API REFERENCES
+Video Models
+OpenAI
+sora-2-pro-i2v
+This documentation is valid for the following list of our models:
+
+openai/sora-2-pro-i2v
+
+Try in Playground
+
+Sora 2 Pro is state-of-the-art, most advanced media generation model, generating videos with synced audio.
+
+Setup your API Key
+If you don’t have an API key for the AI/ML API yet, feel free to use our Quickstart guide.
+
+How to Make a Call
+API Schemas
+Create a video generation task and send it to the server
+You can generate a video using this API. In the basic setup, you only need a reference image and a prompt. 
+This endpoint creates and sends a video generation task to the server — and returns a generation ID.
+
+post
+
+https://api.aimlapi.com
+/v2/video/generations
+Body
+
+application/json
+
+application/json
+model
+undefined · enum
+Possible values: openai/sora-2-pro-i2v
+image_url
+string · uri
+A URL or a Base64-encoded image file used as the initial frame for video generation. The image dimensions must match the selected video resolution and aspect ratio. Supported configurations include: 720p with aspect ratios:
+
+16:9 — 1280x720
+9:16 — 720x1280
+1080p with aspect ratios:
+
+16:9 — 1792x1024
+9:16 — 1024x1792
+prompt
+string
+The text description of the scene, subject, or action to generate in the video.
+
+duration
+integer · enum
+The length of the output video in seconds.
+
+Possible values: 4812
+aspect_ratio
+string · enum
+The aspect ratio of the generated video.
+
+Default: 16:9
+Possible values: 16:99:16
+resolution
+string · enum
+Specifies the size of the output video in pixels
+
+Default: 1080p
+Possible values: 720p1080p
+Responses
+201
+Success
+No content
+
+post
+/v2/video/generations
+
+HTTP
+
+HTTP
+
+Copy
+POST /v2/video/generations HTTP/1.1
+Host: api.aimlapi.com
+Content-Type: application/json
+Accept: */*
+Content-Length: 139
+
+{
+  "model": "openai/sora-2-pro-i2v",
+  "image_url": "https://example.com",
+  "prompt": "text",
+  "duration": 4,
+  "aspect_ratio": "16:9",
+  "resolution": "1080p"
+}
+201
+Success
+No content
+
+Retrieve the generated video from the server
+After sending a request for video generation, this task is added to the queue. This endpoint lets you check the status of a video generation task using its id, obtained from the endpoint described above.
+If the video generation task status is complete, the response will include the final result — with the generated video URL and additional metadata.
+
+get
+
+https://api.aimlapi.com
+/v2/video/generations
+Query parameters
+generation_id
+string
+Responses
+200
+Success
+No content
+
+get
+/v2/video/generations
+
+HTTP
+
+HTTP
+
+Copy
+GET /v2/video/generations?generation_id=text HTTP/1.1
+Host: api.aimlapi.com
+Accept: */*
+200
+Success
+No content
+
+Full Example: Generating and Retrieving the Video From the Server
+The code below creates a video generation task, then automatically polls the server every 10 seconds until it finally receives the video URL.
+
+Python
+JavaScript
+
+Copy
+import requests
+import time
+
+# Insert your AI/ML API key instead of <YOUR_AIMLAPI_KEY>:
+api_key = "<YOUR_AIMLAPI_KEY>"
+
+# Creating and sending a video generation task to the server
+def generate_video():
+    url = "https://api.aimlapi.com/v2/video/generations"
+    headers = {
+        "Authorization": f"Bearer {api_key}", 
+    }
+
+    data = {
+        "model": "openai/sora-2-pro-i2v",
+        "prompt": "She turns around and smiles, then slowly walks out of the frame.",
+        "image_url": "https://cdn.openai.com/API/docs/images/sora/woman_skyline_original_720p.jpeg",
+        "resolution": "720p",
+        "duration": 4
+    }
+ 
+    response = requests.post(url, json=data, headers=headers)
+    if response.status_code >= 400:
+        print(f"Error: {response.status_code} - {response.text}")
+    else:
+        response_data = response.json()
+        print(response_data)
+        return response_data
+    
+
+# Requesting the result of the task from the server using the generation_id
+def get_video(gen_id):
+    url = "https://api.aimlapi.com/v2/video/generations"
+    params = {
+        "generation_id": gen_id,
+    }
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}", 
+        "Content-Type": "application/json"
+        }
+
+    response = requests.get(url, params=params, headers=headers)
+    return response.json()
+
+
+def main():
+    # Generate video
+    gen_response = generate_video()
+    gen_id = gen_response.get("id")
+    print("Generation ID:  ", gen_id)
+
+    # Try to retrieve the video from the server every 10 sec
+    if gen_id:
+        start_time = time.time()
+
+        timeout = 600
+        while time.time() - start_time < timeout:
+            response_data = get_video(gen_id)
+
+            if response_data is None:
+                print("Error: No response from API")
+                break
+        
+            status = response_data.get("status")
+            print("Status:", status)
+
+            if status == "waiting" or status == "active" or  status == "queued" or status == "generating":
+                print("Still waiting... Checking again in 10 seconds.")
+                time.sleep(10)
+            else:
+                print("Processing complete:/n", response_data)
+                return response_data
+   
+        print("Timeout reached. Stopping.")
+        return None     
+
+
+if __name__ == "__main__":
+    main()
+Processing time: ~1.5 min.
+
+Low-res GIF preview:
+
+
+"She turns around and smiles, then slowly walks out of the frame."
+Previous
+sora-2-pro-t2v
+Next
+PixVerse
+Last updated 3 days ago
+
+
+sora-2-pro-i2v | AI/ML API Documentation

@@ -2229,8 +2229,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ===== ARC BLOCKCHAIN & VOICE COMMAND ROUTES (Hackathon Feature!) =====
   
-  // Initialize Arc blockchain service (demo mode for hackathon)
-  const arcService = createArcBlockchainService({ demoMode: true });
+  // Initialize Arc blockchain service (production mode)
+  // Note: Currently uses simulated blockchain for hackathon demo
+  // Set ARC_DEMO_MODE=true environment variable to enable explicit demo logging
+  const arcService = createArcBlockchainService({ 
+    demoMode: process.env.ARC_DEMO_MODE === 'true' 
+  });
 
   // Get or create Arc wallet for authenticated user
   app.get('/api/arc/wallet', isAuthenticated, async (req: any, res) => {

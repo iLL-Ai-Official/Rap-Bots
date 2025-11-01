@@ -39,15 +39,17 @@ export function getSession() {
   return session({
     secret: process.env.SESSION_SECRET || 'fallback-secret-for-development',
     store: sessionStore,
-    resave: true, // Force session save to avoid expiration
-    saveUninitialized: true, // Save empty sessions
+    resave: false, // Don't save session if unmodified (recommended)
+    saveUninitialized: false, // Don't create session until something stored (recommended)
     rolling: true, // Extend session on activity
     cookie: {
       httpOnly: true,
       secure: false, // Allow non-HTTPS for development
       maxAge: sessionTtl,
       sameSite: 'lax',
+      path: '/',
     },
+    name: 'rapbots.sid', // Custom session name
   });
 }
 
@@ -130,9 +132,34 @@ export async function setupAuth(app: Express) {
   });
 
   app.get("/api/callback", (req, res, next) => {
-    passport.authenticate(`replitauth:${req.hostname}`, {
-      successReturnToOrRedirect: "/",
-      failureRedirect: "/api/login",
+    passport.authenticate(`replitauth:${req.hostname}`, (err, user) => {
+      if (err) {
+        console.error('Authentication error:', err);
+        return res.redirect("/api/login");
+      }
+      
+      if (!user) {
+        console.error('No user returned from authentication');
+        return res.redirect("/api/login");
+      }
+
+      req.logIn(user, (loginErr) => {
+        if (loginErr) {
+          console.error('Login error:', loginErr);
+          return res.redirect("/api/login");
+        }
+        
+        // Explicitly save session before redirect
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error('Session save error:', saveErr);
+            return res.redirect("/api/login");
+          }
+          
+          console.log('✅ User authenticated and session saved:', user.claims?.sub);
+          res.redirect("/");
+        });
+      });
     })(req, res, next);
   });
 

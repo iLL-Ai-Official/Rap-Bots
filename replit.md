@@ -16,7 +16,25 @@ The application is built with a clear separation between frontend and backend se
 
 ## Recent Changes
 
-### November 1, 2025 - Monetization System Launch
+### November 1, 2025 (Later) - Arc Blockchain & ElevenLabs Hackathon Integration
+**"AI Agents on Arc with USDC" Hackathon (Oct 27 - Nov 9, 2025)**
+- **Arc Blockchain Integration**: Added USDC payment system on Circle's Arc L1 blockchain
+  - 3 new tables: arc_wallets, arc_transactions, voice_commands
+  - USDC battle rewards: $0.10 for wins, tournament prizes ($50/$25/$10)
+  - Voice-to-blockchain workflow: speak commands → execute USDC transactions
+  - EVM-compatible Arc testnet integration with USDC as native gas
+- **Enhanced ElevenLabs Integration**: Optimized for "Best Use of Voice AI" category
+  - Multiple model support: Flash v2.5 (75ms latency), Turbo v2.5 (balanced), Multilingual v2 (dramatic)
+  - Voice cloning for personalized rap battles
+  - Real-time conversational AI for voice commands
+  - Pronunciation dictionaries for rap terminology
+- **Voice Command System**: Natural language → blockchain transactions
+  - "Send USDC to winner", "Check my balance", "Claim battle rewards"
+  - Full transaction history with voice command context
+  - ElevenLabs audio confirmations for executed transactions
+- **Database**: 17 total tables (added arc_wallets, arc_transactions, voice_commands)
+
+### November 1, 2025 (Earlier) - Monetization System Launch
 - **Database Schema**: Added 4 new tables (user_wallets, transactions, mining_events, ad_impressions) for comprehensive monetization tracking
 - **Mining System**: Users earn tokens through battles, wins, daily logins, and when others battle their clones
   - Battle completion: 0.1 tokens

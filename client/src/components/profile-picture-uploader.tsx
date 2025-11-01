@@ -20,9 +20,15 @@ export function ProfilePictureUploader() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // Get user's profile pictures
+  // Check auth status
+  const { data: user } = useQuery<any>({
+    queryKey: ['/api/auth/user'],
+  });
+
+  // Get user's profile pictures (only if authenticated)
   const { data: pictures = [], isLoading } = useQuery<ProfilePicture[]>({
     queryKey: ['/api/profile-pictures'],
+    enabled: !!user,
   });
 
   // Upload mutation
@@ -135,6 +141,21 @@ export function ProfilePictureUploader() {
     if (!selectedFile) return;
     uploadMutation.mutate(selectedFile);
   };
+
+  // Show message if not authenticated
+  if (!user) {
+    return (
+      <Card className="p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700">
+        <div className="text-center py-8">
+          <User className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+          <h3 className="text-lg font-bold mb-2 text-black dark:text-white">Login Required</h3>
+          <p className="text-gray-600 dark:text-gray-400">
+            Please log in to generate AI rapper avatars
+          </p>
+        </div>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">

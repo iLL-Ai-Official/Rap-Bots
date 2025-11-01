@@ -1777,8 +1777,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await storage.awardMiningTokens(userId, "daily_login");
       
       // Award credits
-      const { CREDIT_REWARDS } = await import('@shared/schema');
-      const newBalance = wallet.battleCredits + CREDIT_REWARDS.DAILY_LOGIN;
+      const { MONETIZATION_CONFIG } = await import('@shared/schema');
+      const newBalance = wallet.battleCredits + MONETIZATION_CONFIG.CREDIT_REWARDS.DAILY_LOGIN;
       await storage.updateWalletBalance(userId, { battleCredits: newBalance });
       
       // Update last claim timestamp
@@ -1794,7 +1794,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.recordTransaction({
         userId,
         type: "mining",
-        amount: CREDIT_REWARDS.DAILY_LOGIN.toString(),
+        amount: MONETIZATION_CONFIG.CREDIT_REWARDS.DAILY_LOGIN.toString(),
         currency: "credits",
         description: "Daily login bonus credits",
       });
@@ -1803,7 +1803,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.json({ 
         tokens: result.tokens,
-        credits: CREDIT_REWARDS.DAILY_LOGIN,
+        credits: MONETIZATION_CONFIG.CREDIT_REWARDS.DAILY_LOGIN,
         message: 'Daily bonus claimed!' 
       });
     } catch (error) {
@@ -2070,8 +2070,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: 'Arc wallet not found. Create wallet first.' });
       }
 
-      // Get ElevenLabs service if available
-      const elevenLabsService = userTTSManager.getUserElevenLabsService(userId);
+      // Get ElevenLabs service if available (optional - voice processor will work without it)
+      const elevenLabsService = undefined; // TODO: Implement getUserElevenLabsService in UserTTSManager
 
       // Create voice command processor
       const voiceProcessor = createVoiceCommandProcessor(arcService, elevenLabsService);

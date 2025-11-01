@@ -11,6 +11,8 @@ import { barkTTS } from "./services/bark";
 import { scoringService } from "./services/scoring";
 import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
+import { createArcBlockchainService } from "./services/arc-blockchain";
+import { createVoiceCommandProcessor } from "./services/voice-command-processor";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -1997,6 +1999,203 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error serving audio file:', error);
       res.status(500).json({ message: 'Failed to serve audio file' });
+    }
+  });
+
+  // ===== ARC BLOCKCHAIN & VOICE COMMAND ROUTES (Hackathon Feature!) =====
+  
+  // Initialize Arc blockchain service (demo mode for hackathon)
+  const arcService = createArcBlockchainService({ demoMode: true });
+
+  // Get or create Arc wallet for authenticated user
+  app.get('/api/arc/wallet', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Check if wallet already exists
+      let wallet = await storage.getArcWallet(userId);
+      
+      if (!wallet) {
+        // Create new Arc wallet
+        const walletAddress = await arcService.createWallet(userId);
+        wallet = await storage.getOrCreateArcWallet(userId, walletAddress);
+        console.log(`⛓️ Created new Arc wallet for user ${userId}`);
+      }
+
+      // Get current balance from Arc blockchain
+      const usdcBalance = await arcService.getUSDCBalance(wallet.walletAddress);
+      
+      // Update balance in database if changed
+      if (usdcBalance !== wallet.usdcBalance) {
+        wallet = await storage.updateArcWalletBalance(userId, { usdcBalance });
+      }
+
+      res.json(wallet);
+    } catch (error: any) {
+      console.error('Error getting Arc wallet:', error);
+      res.status(500).json({ message: 'Failed to get Arc wallet', error: error.message });
+    }
+  });
+
+  // Get Arc transaction history
+  app.get('/api/arc/transactions', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const transactions = await storage.getUserArcTransactions(userId, limit);
+      
+      res.json(transactions);
+    } catch (error: any) {
+      console.error('Error getting Arc transactions:', error);
+      res.status(500).json({ message: 'Failed to get transactions', error: error.message });
+    }
+  });
+
+  // Process voice command (Hackathon key feature!)
+  app.post('/api/arc/voice-command', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { commandText } = req.body;
+
+      if (!commandText) {
+        return res.status(400).json({ message: 'Command text is required' });
+      }
+
+      console.log(`🎤 Received voice command from ${userId}: "${commandText}"`);
+
+      // Get user's Arc wallet
+      const wallet = await storage.getArcWallet(userId);
+      if (!wallet) {
+        return res.status(404).json({ message: 'Arc wallet not found. Create wallet first.' });
+      }
+
+      // Get ElevenLabs service if available
+      const elevenLabsService = userTTSManager.getUserElevenLabsService(userId);
+
+      // Create voice command processor
+      const voiceProcessor = createVoiceCommandProcessor(arcService, elevenLabsService);
+
+      // Execute command
+      const result = await voiceProcessor.executeCommand(userId, wallet.walletAddress, commandText);
+
+      // Record voice command in database
+      const voiceCommand = await storage.recordVoiceCommand({
+        userId,
+        commandText,
+        intent: result.success ? 'executed' : 'failed',
+        parameters: {},
+        status: result.success ? 'executed' : 'failed',
+        errorMessage: result.error,
+        audioUrl: result.audioUrl,
+        executedAt: result.success ? new Date() : undefined,
+      });
+
+      // If USDC transaction was created, record it
+      if (result.txHash && result.success) {
+        const arcTx = await storage.recordArcTransaction({
+          userId,
+          type: 'voice_command',
+          amount: '0.05', // Voice command reward
+          fromAddress: '0x0000000000000000000000000000000000000000',
+          toAddress: wallet.walletAddress,
+          status: 'confirmed',
+          txHash: result.txHash,
+          voiceCommandText: commandText,
+          gasUsedUSDC: '0.000123',
+          blockNumber: 1000000,
+          confirmedAt: new Date(),
+        });
+
+        // Link transaction to voice command
+        await storage.updateVoiceCommand(voiceCommand.id, {
+          arcTransactionId: arcTx.id,
+        });
+
+        // Update wallet balance
+        const newBalance = (parseFloat(wallet.usdcBalance) + 0.05).toFixed(6);
+        await storage.updateArcWalletBalance(userId, {
+          usdcBalance: newBalance,
+          lifetimeEarned: (parseFloat(wallet.lifetimeEarned) + 0.05).toFixed(6),
+        });
+      }
+
+      res.json({
+        ...result,
+        voiceCommandId: voiceCommand.id,
+      });
+    } catch (error: any) {
+      console.error('Error processing voice command:', error);
+      res.status(500).json({ message: 'Failed to process voice command', error: error.message });
+    }
+  });
+
+  // Get voice command history
+  app.get('/api/arc/voice-commands', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const commands = await storage.getUserVoiceCommands(userId, limit);
+      
+      res.json(commands);
+    } catch (error: any) {
+      console.error('Error getting voice commands:', error);
+      res.status(500).json({ message: 'Failed to get voice commands', error: error.message });
+    }
+  });
+
+  // Award USDC for battle win (called internally after battle completion)
+  app.post('/api/arc/award-battle-win', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { battleId } = req.body;
+
+      if (!battleId) {
+        return res.status(400).json({ message: 'Battle ID is required' });
+      }
+
+      // Get user's Arc wallet
+      const wallet = await storage.getArcWallet(userId);
+      if (!wallet) {
+        return res.status(404).json({ message: 'Arc wallet not found. Create wallet first.' });
+      }
+
+      // Award USDC for battle win
+      const transfer = await arcService.awardBattleWinUSDC(wallet.walletAddress, battleId);
+
+      // Record transaction
+      const arcTx = await storage.recordArcTransaction({
+        userId,
+        type: 'battle_reward',
+        amount: '0.10',
+        fromAddress: '0x0000000000000000000000000000000000000000',
+        toAddress: wallet.walletAddress,
+        status: transfer.status,
+        txHash: transfer.txHash,
+        battleId,
+        gasUsedUSDC: transfer.gasUsedUSDC,
+        blockNumber: transfer.blockNumber,
+        confirmedAt: transfer.confirmedAt,
+      });
+
+      // Update wallet balance
+      const newBalance = (parseFloat(wallet.usdcBalance) + 0.10).toFixed(6);
+      await storage.updateArcWalletBalance(userId, {
+        usdcBalance: newBalance,
+        lifetimeEarned: (parseFloat(wallet.lifetimeEarned) + 0.10).toFixed(6),
+      });
+
+      console.log(`🏆 Awarded 0.10 USDC to user ${userId} for battle ${battleId}`);
+
+      res.json({
+        success: true,
+        transaction: arcTx,
+        newBalance,
+      });
+    } catch (error: any) {
+      console.error('Error awarding battle USDC:', error);
+      res.status(500).json({ message: 'Failed to award USDC', error: error.message });
     }
   });
 

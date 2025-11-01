@@ -1669,11 +1669,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/user/clone/generate', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
+      const { battlesLimit = 10 } = req.body;
       
-      console.log(`🤖 Generating clone for user ${userId}...`);
-      const clone = await storage.createOrUpdateUserClone(userId);
+      // Validate battlesLimit
+      const validatedLimit = Math.min(Math.max(parseInt(battlesLimit) || 10, 1), 9999);
       
-      console.log(`✅ Clone generated: ${clone.cloneName} (Skill: ${clone.skillLevel})`);
+      console.log(`🤖 Generating clone for user ${userId} using ${validatedLimit} battles...`);
+      const clone = await storage.createOrUpdateUserClone(userId, validatedLimit);
+      
+      console.log(`✅ Clone generated: ${clone.cloneName} (Skill: ${clone.skillLevel}, analyzed ${clone.battlesAnalyzed} battles)`);
       res.json(clone);
     } catch (error) {
       console.error('Error generating user clone:', error);

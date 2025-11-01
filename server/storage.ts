@@ -10,6 +10,9 @@ import {
   transactions,
   miningEvents,
   adImpressions,
+  arcWallets,
+  arcTransactions,
+  voiceCommands,
   type User,
   type UpsertUser,
   type Battle,
@@ -36,6 +39,12 @@ import {
   type InsertMiningEvent,
   type AdImpression,
   type InsertAdImpression,
+  type ArcWallet,
+  type InsertArcWallet,
+  type ArcTransaction,
+  type InsertArcTransaction,
+  type VoiceCommand,
+  type InsertVoiceCommand,
   SUBSCRIPTION_TIERS,
   MONETIZATION_CONFIG,
 } from "@shared/schema";
@@ -142,6 +151,28 @@ export interface IStorage {
   // Battle monetization
   deductBattleCredits(userId: string, amount: number): Promise<boolean>;
   awardBattleRewards(userId: string, battleId: string, didWin: boolean): Promise<void>;
+  
+  // Arc Blockchain operations (Hackathon feature!)
+  getOrCreateArcWallet(userId: string, walletAddress: string): Promise<ArcWallet>;
+  getArcWallet(userId: string): Promise<ArcWallet | undefined>;
+  updateArcWalletBalance(userId: string, updates: {
+    usdcBalance?: string;
+    lifetimeEarned?: string;
+  }): Promise<ArcWallet>;
+  recordArcTransaction(transaction: InsertArcTransaction): Promise<ArcTransaction>;
+  getUserArcTransactions(userId: string, limit?: number): Promise<ArcTransaction[]>;
+  updateArcTransactionStatus(txId: string, status: string, txHash?: string, blockNumber?: number): Promise<ArcTransaction>;
+  
+  // Voice Command operations (Hackathon feature!)
+  recordVoiceCommand(command: InsertVoiceCommand): Promise<VoiceCommand>;
+  getUserVoiceCommands(userId: string, limit?: number): Promise<VoiceCommand[]>;
+  updateVoiceCommand(commandId: string, updates: {
+    status?: string;
+    arcTransactionId?: string;
+    errorMessage?: string;
+    audioUrl?: string;
+    executedAt?: Date;
+  }): Promise<VoiceCommand>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1228,6 +1259,177 @@ export class DatabaseStorage implements IStorage {
       },
       { maxAttempts: 3 },
       `awardBattleRewards for ${userId}`
+    );
+  }
+
+  // Arc Blockchain operations (Hackathon feature!)
+  async getOrCreateArcWallet(userId: string, walletAddress: string): Promise<ArcWallet> {
+    return withRetry(
+      async () => {
+        const existing = await this.getArcWallet(userId);
+        if (existing) return existing;
+
+        const [wallet] = await db
+          .insert(arcWallets)
+          .values({
+            userId,
+            walletAddress,
+          })
+          .returning();
+
+        console.log(`⛓️ Created Arc wallet for user ${userId}: ${walletAddress}`);
+        return wallet;
+      },
+      { maxAttempts: 3 },
+      `getOrCreateArcWallet for ${userId}`
+    );
+  }
+
+  async getArcWallet(userId: string): Promise<ArcWallet | undefined> {
+    const [wallet] = await db
+      .select()
+      .from(arcWallets)
+      .where(eq(arcWallets.userId, userId));
+    return wallet;
+  }
+
+  async updateArcWalletBalance(userId: string, updates: {
+    usdcBalance?: string;
+    lifetimeEarned?: string;
+  }): Promise<ArcWallet> {
+    return withRetry(
+      async () => {
+        // First, check if wallet exists
+        const existing = await this.getArcWallet(userId);
+        
+        if (!existing) {
+          throw new Error(`Arc wallet not found for user ${userId}. Create wallet first using getOrCreateArcWallet.`);
+        }
+
+        const [wallet] = await db
+          .update(arcWallets)
+          .set({
+            ...updates,
+            lastSyncedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(arcWallets.userId, userId))
+          .returning();
+
+        if (!wallet) {
+          throw new Error(`Failed to update Arc wallet for user ${userId}`);
+        }
+
+        console.log(`⛓️ Updated Arc wallet for ${userId}: USDC=${updates.usdcBalance || 'unchanged'}`);
+        return wallet;
+      },
+      { maxAttempts: 3 },
+      `updateArcWalletBalance for ${userId}`
+    );
+  }
+
+  async recordArcTransaction(transaction: InsertArcTransaction): Promise<ArcTransaction> {
+    return withRetry(
+      async () => {
+        const [tx] = await db
+          .insert(arcTransactions)
+          .values(transaction)
+          .returning();
+
+        console.log(`⛓️ Recorded Arc transaction: ${tx.type} ${tx.amount} USDC for user ${tx.userId}`);
+        return tx;
+      },
+      { maxAttempts: 3 },
+      `recordArcTransaction`
+    );
+  }
+
+  async getUserArcTransactions(userId: string, limit: number = 20): Promise<ArcTransaction[]> {
+    const txs = await db
+      .select()
+      .from(arcTransactions)
+      .where(eq(arcTransactions.userId, userId))
+      .orderBy(desc(arcTransactions.createdAt))
+      .limit(limit);
+
+    return txs;
+  }
+
+  async updateArcTransactionStatus(
+    txId: string, 
+    status: string, 
+    txHash?: string, 
+    blockNumber?: number
+  ): Promise<ArcTransaction> {
+    return withRetry(
+      async () => {
+        const [tx] = await db
+          .update(arcTransactions)
+          .set({
+            status,
+            txHash,
+            blockNumber,
+            confirmedAt: status === 'confirmed' ? new Date() : undefined,
+          })
+          .where(eq(arcTransactions.id, txId))
+          .returning();
+
+        console.log(`⛓️ Updated Arc transaction ${txId}: ${status}`);
+        return tx;
+      },
+      { maxAttempts: 3 },
+      `updateArcTransactionStatus for ${txId}`
+    );
+  }
+
+  // Voice Command operations (Hackathon feature!)
+  async recordVoiceCommand(command: InsertVoiceCommand): Promise<VoiceCommand> {
+    return withRetry(
+      async () => {
+        const [cmd] = await db
+          .insert(voiceCommands)
+          .values(command)
+          .returning();
+
+        console.log(`🎤 Recorded voice command: "${cmd.commandText}" with intent ${cmd.intent}`);
+        return cmd;
+      },
+      { maxAttempts: 3 },
+      `recordVoiceCommand`
+    );
+  }
+
+  async getUserVoiceCommands(userId: string, limit: number = 20): Promise<VoiceCommand[]> {
+    const commands = await db
+      .select()
+      .from(voiceCommands)
+      .where(eq(voiceCommands.userId, userId))
+      .orderBy(desc(voiceCommands.createdAt))
+      .limit(limit);
+
+    return commands;
+  }
+
+  async updateVoiceCommand(commandId: string, updates: {
+    status?: string;
+    arcTransactionId?: string;
+    errorMessage?: string;
+    audioUrl?: string;
+    executedAt?: Date;
+  }): Promise<VoiceCommand> {
+    return withRetry(
+      async () => {
+        const [cmd] = await db
+          .update(voiceCommands)
+          .set(updates)
+          .where(eq(voiceCommands.id, commandId))
+          .returning();
+
+        console.log(`🎤 Updated voice command ${commandId}: ${updates.status || 'updated'}`);
+        return cmd;
+      },
+      { maxAttempts: 3 },
+      `updateVoiceCommand for ${commandId}`
     );
   }
 }

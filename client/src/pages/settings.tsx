@@ -4,7 +4,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { APIKeyManager } from '@/components/api-key-manager';
-import { Settings2, Mic, Key, Shield } from 'lucide-react';
+import { ProfilePictureUploader } from '@/components/profile-picture-uploader';
+import { Settings2, Mic, Key, Shield, User } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
 const settingsImage = "/images/Audio_settings_interface_5e678558.png";
@@ -41,8 +42,12 @@ export default function SettingsPage() {
         </div>
 
         {/* Settings Tabs */}
-        <Tabs defaultValue="tts" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 bg-gray-800 border-gray-700">
+        <Tabs defaultValue="avatar" className="w-full">
+          <TabsList className="grid w-full grid-cols-4 bg-gray-800 border-gray-700">
+            <TabsTrigger value="avatar" className="data-[state=active]:bg-purple-600">
+              <User className="w-4 h-4 mr-2" />
+              Profile Avatar
+            </TabsTrigger>
             <TabsTrigger value="tts" className="data-[state=active]:bg-purple-600">
               <Mic className="w-4 h-4 mr-2" />
               TTS Services
@@ -56,6 +61,11 @@ export default function SettingsPage() {
               Account
             </TabsTrigger>
           </TabsList>
+
+          {/* Profile Avatar Tab */}
+          <TabsContent value="avatar" className="space-y-6">
+            <ProfilePictureUploader />
+          </TabsContent>
 
           {/* TTS Services Tab */}
           <TabsContent value="tts" className="space-y-6">

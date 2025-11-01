@@ -13,6 +13,7 @@ import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
 import { createArcBlockchainService } from "./services/arc-blockchain";
 import { createVoiceCommandProcessor } from "./services/voice-command-processor";
+import { getElevenLabsSFXService, hasSFXServiceAvailable } from "./services/elevenlabs-sfx";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -1620,34 +1621,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Serve custom SFX files
-  app.get('/api/sfx/:filename', (req, res) => {
+  // Serve AI-generated sound effects using ElevenLabs
+  app.get('/api/sfx/:soundType', async (req, res) => {
     try {
-      const filename = req.params.filename;
-      console.log(`🎵 Serving custom SFX file: ${filename}`);
+      const soundType = req.params.soundType.replace('.mp3', '');
+      console.log(`🎵 Requesting sound effect: ${soundType}`);
 
-      // Security: Validate filename
-      if (!filename.endsWith('.mp3') || filename.includes('/') || filename.includes('..')) {
-        return res.status(404).json({ error: 'Invalid file request' });
+      // Map old filenames to new sound types
+      const soundMapping: Record<string, string> = {
+        'boxing-bell': 'boxing-bell',
+        'crowd-reaction': 'crowd-medium',
+        'air-horn': 'air-horn',
+      };
+
+      const mappedType = soundMapping[soundType] || soundType;
+
+      // Check if ElevenLabs is available
+      if (!hasSFXServiceAvailable()) {
+        console.log('⚠️ ElevenLabs SFX not available, returning 404');
+        return res.status(404).json({ error: 'Sound effects service not available' });
       }
 
-      const filePath = path.join(process.cwd(), 'public_sfx', filename);
+      try {
+        const sfxService = getElevenLabsSFXService();
+        const audioBuffer = await sfxService.getSound(mappedType);
 
-      if (!fs.existsSync(filePath)) {
-        console.log(`⚠️ SFX file not found: ${filePath}`);
-        return res.status(404).json({ error: 'SFX file not found' });
+        console.log(`✅ Serving AI-generated SFX: ${mappedType} (${audioBuffer.length} bytes)`);
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
+        res.send(audioBuffer);
+
+      } catch (error: any) {
+        console.error(`❌ Failed to generate sound ${mappedType}:`, error.message);
+        return res.status(500).json({ error: 'Failed to generate sound effect' });
       }
-
-      console.log(`✅ Serving custom SFX: ${filePath}`);
-      res.setHeader('Content-Type', 'audio/mpeg');
-      res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
-
-      const fileStream = fs.createReadStream(filePath);
-      fileStream.pipe(res);
 
     } catch (error) {
-      console.error('Error serving SFX file:', error);
-      res.status(500).json({ error: 'Failed to serve SFX file' });
+      console.error('Error serving SFX:', error);
+      res.status(500).json({ error: 'Failed to serve sound effect' });
+    }
+  });
+
+  // Pre-generate battle sounds (call on server start)
+  app.post('/api/sfx/initialize', isAuthenticated, async (req: any, res) => {
+    try {
+      if (!hasSFXServiceAvailable()) {
+        return res.status(503).json({ message: 'Sound effects service not available' });
+      }
+
+      const sfxService = getElevenLabsSFXService();
+      await sfxService.preGenerateBattleSounds();
+
+      const stats = sfxService.getCacheStats();
+      res.json({ 
+        message: 'Battle sounds pre-generated successfully',
+        cached: stats.count,
+        sounds: stats.keys,
+        totalSize: `${(stats.totalSize / 1024 / 1024).toFixed(2)} MB`
+      });
+    } catch (error: any) {
+      console.error('Error initializing SFX:', error);
+      res.status(500).json({ message: error.message || 'Failed to initialize sound effects' });
     }
   });
 

@@ -363,3 +363,144 @@ export type UserClone = typeof userClones.$inferSelect;
 export const userCloneRelations = relations(userClones, ({ one }) => ({
   user: one(users, { fields: [userClones.userId], references: [users.id] }),
 }));
+
+// ====================
+// MONETIZATION SYSTEM
+// ====================
+
+// User Wallet - Tracks credits and tokens
+export const userWallets = pgTable("user_wallets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull().unique(),
+  battleCredits: integer("battle_credits").notNull().default(10), // Credits to spend on battles
+  tokens: decimal("tokens", { precision: 18, scale: 8 }).notNull().default("0.00000000"), // Mined/earned tokens
+  lifetimeEarned: decimal("lifetime_earned", { precision: 18, scale: 8 }).notNull().default("0.00000000"), // Total earned
+  lifetimeSpent: decimal("lifetime_spent", { precision: 18, scale: 8 }).notNull().default("0.00000000"), // Total spent
+  cloneAdRevenue: decimal("clone_ad_revenue", { precision: 10, scale: 2 }).notNull().default("0.00"), // Revenue from clone battles
+  totalAdImpressions: integer("total_ad_impressions").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_user_wallets_user_id").on(table.userId),
+]);
+
+// Transaction history for all credit/token movements
+export const transactions = pgTable("transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  type: varchar("type").notNull(), // mining, battle_cost, battle_win, ad_revenue, purchase, withdrawal, clone_revenue
+  amount: decimal("amount", { precision: 18, scale: 8 }).notNull(),
+  currency: varchar("currency").notNull().default("credits"), // credits, tokens, usd
+  description: text("description"),
+  battleId: varchar("battle_id").references(() => battles.id),
+  relatedUserId: varchar("related_user_id").references(() => users.id), // For clone revenue - who battled the clone
+  metadata: jsonb("metadata").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_transactions_user_id").on(table.userId),
+  index("idx_transactions_type").on(table.type),
+  index("idx_transactions_created_at").on(table.createdAt),
+]);
+
+// Mining events - Track when users mine tokens
+export const miningEvents = pgTable("mining_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  tokensEarned: decimal("tokens_earned", { precision: 18, scale: 8 }).notNull(),
+  activityType: varchar("activity_type").notNull(), // battle_complete, daily_login, referral, clone_battled
+  battleId: varchar("battle_id").references(() => battles.id),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_mining_events_user_id").on(table.userId),
+  index("idx_mining_events_created_at").on(table.createdAt),
+]);
+
+// Ad impressions - Track ads shown and revenue generated
+export const adImpressions = pgTable("ad_impressions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  battleId: varchar("battle_id").references(() => battles.id).notNull(),
+  viewerId: varchar("viewer_id").references(() => users.id).notNull(), // User who saw the ad
+  cloneOwnerId: varchar("clone_owner_id").references(() => users.id).notNull(), // User who owns the clone
+  adProvider: varchar("ad_provider").notNull().default("system"), // system, google_ads, etc.
+  revenueGenerated: decimal("revenue_generated", { precision: 10, scale: 4 }).notNull().default("0.0000"),
+  revenueShare: decimal("revenue_share", { precision: 10, scale: 4 }).notNull().default("0.0000"), // Owner's share
+  metadata: jsonb("metadata").$type<{
+    adId?: string;
+    adType?: string;
+    impressionId?: string;
+  }>(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_ad_impressions_clone_owner").on(table.cloneOwnerId),
+  index("idx_ad_impressions_battle_id").on(table.battleId),
+  index("idx_ad_impressions_created_at").on(table.createdAt),
+]);
+
+// Insert schemas
+export const insertUserWalletSchema = createInsertSchema(userWallets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertTransactionSchema = createInsertSchema(transactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertMiningEventSchema = createInsertSchema(miningEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertAdImpressionSchema = createInsertSchema(adImpressions).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Type exports
+export type InsertUserWallet = z.infer<typeof insertUserWalletSchema>;
+export type UserWallet = typeof userWallets.$inferSelect;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertMiningEvent = z.infer<typeof insertMiningEventSchema>;
+export type MiningEvent = typeof miningEvents.$inferSelect;
+export type InsertAdImpression = z.infer<typeof insertAdImpressionSchema>;
+export type AdImpression = typeof adImpressions.$inferSelect;
+
+// Monetization constants
+export const MONETIZATION_CONFIG = {
+  // Battle costs
+  BATTLE_COST_CREDITS: 1, // Cost to start a battle
+  
+  // Mining rewards
+  MINING_REWARDS: {
+    BATTLE_COMPLETE: "0.10000000", // Tokens per battle
+    BATTLE_WIN: "0.25000000", // Bonus for winning
+    DAILY_LOGIN: "0.05000000", // Daily login bonus
+    CLONE_BATTLED: "0.15000000", // When someone battles your clone
+    REFERRAL: "1.00000000", // Referral bonus
+  },
+  
+  // Credit rewards
+  CREDIT_REWARDS: {
+    BATTLE_WIN: 2, // Credits earned for winning
+    DAILY_LOGIN: 5, // Daily login bonus
+    LEVEL_UP: 10, // Bonus credits when leveling up
+  },
+  
+  // Ad revenue
+  AD_REVENUE: {
+    PER_IMPRESSION: "0.0050", // $0.005 per ad view
+    OWNER_SHARE: 0.70, // 70% goes to clone owner
+    PLATFORM_SHARE: 0.30, // 30% goes to platform
+  },
+  
+  // Credit purchase packages
+  CREDIT_PACKAGES: [
+    { credits: 100, price: 0.99, bonus: 0 },
+    { credits: 500, price: 3.99, bonus: 50 },
+    { credits: 1000, price: 6.99, bonus: 150 },
+    { credits: 5000, price: 24.99, bonus: 1000 },
+  ],
+} as const;

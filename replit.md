@@ -16,16 +16,15 @@ The application is built with a clear separation between frontend and backend se
 
 ## Recent Changes
 
-### November 1, 2025 (Latest) - RapBots Coin Flip Game Added
-- **Coin Flip Gambling Game**: Added fun coin flip mini-game with custom RapBots coin design
+### November 1, 2025 (Latest) - Coin Flip for Battle Turn Order
+- **Coin Flip Feature**: Added coin flip system to determine who goes first in battles
   - New page: /coinflip with animated 3D coin flip
   - Custom coin faces: Rapper with microphone (heads) vs Robot rapper (tails)
-  - Credit betting system: Bet 1-50 credits for 2x payout
+  - Turn order determination: Match your call = You go first, Miss = Opponent goes first
   - 1 new API endpoint: POST /api/coinflip with fair 50/50 odds
-  - Integrated with wallet system for seamless credit management
-  - Smooth flip animations with CSS 3D transforms
-- **User Interface**: Added Coin Flip quick action card on home page
-- **App Status**: 18 pages total, fully functional coin flip game ready
+  - Smooth 3D flip animations with CSS transforms
+- **User Interface**: Added "Who Goes First?" quick action card on home page
+- **App Status**: 18 pages total, fully functional turn order system ready
 
 ### November 1, 2025 - Production Ready: ElevenLabs SFX & Arc Blockchain
 - **Real Battle Sound Effects**: Integrated ElevenLabs Sound Effects API for authentic crowd reactions and battle sounds

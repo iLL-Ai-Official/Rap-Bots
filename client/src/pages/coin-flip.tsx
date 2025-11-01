@@ -3,58 +3,44 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Coins, TrendingUp, Award } from "lucide-react";
+import { Coins, Swords, Award } from "lucide-react";
 import { Link } from "wouter";
 import coinHeads from "@assets/coin_for_isolated_1762025827709.png";
 import coinTails from "@assets/coin_feat_isolated_1762025846950.png";
 
 interface CoinFlipResult {
   result: 'heads' | 'tails';
-  won: boolean;
-  creditsWon: number;
-  newBalance: number;
-}
-
-interface WalletData {
-  battleCredits: number;
-  tokens: string;
+  userChoice: 'heads' | 'tails';
+  userGoesFirst: boolean;
 }
 
 export default function CoinFlip() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isFlipping, setIsFlipping] = useState(false);
-  const [lastResult, setLastResult] = useState<'heads' | 'tails' | null>(null);
-  const [betAmount, setBetAmount] = useState(1);
+  const [lastResult, setLastResult] = useState<CoinFlipResult | null>(null);
   const [userChoice, setUserChoice] = useState<'heads' | 'tails'>('heads');
   const [flipCount, setFlipCount] = useState(0);
 
-  const { data: wallet } = useQuery<WalletData>({
-    queryKey: ['/api/wallet'],
-    enabled: !!user,
-  });
-
-  const flipMutation = useMutation({
-    mutationFn: async (choice: 'heads' | 'tails') => {
-      return apiRequest<CoinFlipResult>('/api/coinflip', 'POST', { choice, betAmount });
+  const flipMutation = useMutation<CoinFlipResult, Error, 'heads' | 'tails'>({
+    mutationFn: async (choice: 'heads' | 'tails'): Promise<CoinFlipResult> => {
+      return apiRequest('/api/coinflip', 'POST', { choice }) as Promise<CoinFlipResult>;
     },
     onSuccess: (data: CoinFlipResult) => {
-      setLastResult(data.result);
-      queryClient.invalidateQueries({ queryKey: ['/api/wallet'] });
+      setLastResult(data);
       
-      if (data.won) {
+      if (data.userGoesFirst) {
         toast({
-          title: "🎉 You Won!",
-          description: `You won ${data.creditsWon} credits! New balance: ${data.newBalance}`,
+          title: "🎉 You Go First!",
+          description: `Coin landed on ${data.result} - You get the first verse!`,
         });
       } else {
         toast({
-          title: "💔 You Lost",
-          description: `Better luck next time! Balance: ${data.newBalance}`,
-          variant: "destructive",
+          title: "🎯 Opponent Goes First",
+          description: `Coin landed on ${data.result} - Your opponent gets the first verse`,
         });
       }
     },
@@ -68,10 +54,10 @@ export default function CoinFlip() {
   });
 
   const handleFlip = () => {
-    if (!wallet || wallet.battleCredits < betAmount) {
+    if (!user) {
       toast({
-        title: "Insufficient Credits",
-        description: "You need more credits to flip!",
+        title: "Login Required",
+        description: "Please login to flip the coin",
         variant: "destructive",
       });
       return;
@@ -96,9 +82,9 @@ export default function CoinFlip() {
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-4xl font-bold text-white mb-2">
-              🪙 RapBots Coin Flip
+              🪙 Who Goes First?
             </h1>
-            <p className="text-gray-300">Double or nothing - test your luck!</p>
+            <p className="text-gray-300">Flip the coin to determine who starts the battle!</p>
           </div>
           <Link href="/">
             <Button variant="outline" className="border-purple-400 text-purple-400">
@@ -107,23 +93,15 @@ export default function CoinFlip() {
           </Link>
         </div>
 
-        {/* Wallet Balance */}
+        {/* Info Card */}
         <Card className="bg-slate-800 border-purple-500 mb-6">
           <CardContent className="p-4">
-            <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <Coins className="h-5 w-5 text-yellow-400" />
-                <span className="text-white font-semibold">Your Credits:</span>
-                <Badge className="bg-yellow-600 text-white">
-                  {wallet?.battleCredits || 0}
-                </Badge>
+            <div className="flex items-center gap-3">
+              <Swords className="h-6 w-6 text-purple-400" />
+              <div>
+                <p className="text-white font-semibold">Battle Turn Order</p>
+                <p className="text-gray-400 text-sm">Choose heads or tails, flip the coin, and see who delivers the first verse!</p>
               </div>
-              <Link href="/wallet">
-                <Button size="sm" variant="outline" className="border-green-400 text-green-400">
-                  <TrendingUp className="h-4 w-4 mr-1" />
-                  Get More Credits
-                </Button>
-              </Link>
             </div>
           </CardContent>
         </Card>
@@ -143,7 +121,7 @@ export default function CoinFlip() {
                     isFlipping ? 'animate-spin-fast' : ''
                   }`}
                   style={{
-                    transform: lastResult === 'tails' ? 'rotateY(180deg)' : 'rotateY(0deg)',
+                    transform: lastResult?.result === 'tails' ? 'rotateY(180deg)' : 'rotateY(0deg)',
                     transformStyle: 'preserve-3d',
                   }}
                 >
@@ -166,9 +144,12 @@ export default function CoinFlip() {
 
               {/* Result Display */}
               {lastResult && !isFlipping && (
-                <div className="text-center mb-4">
+                <div className="text-center mb-4 space-y-2">
                   <p className="text-2xl font-bold text-yellow-400">
-                    {lastResult === 'heads' ? '🎤 Rapper (Heads)' : '🤖 Robot (Tails)'}
+                    {lastResult.result === 'heads' ? '🎤 Rapper (Heads)' : '🤖 Robot (Tails)'}
+                  </p>
+                  <p className="text-lg text-white">
+                    {lastResult.userGoesFirst ? '✅ You Go First!' : '🎯 Opponent Goes First'}
                   </p>
                 </div>
               )}
@@ -181,15 +162,15 @@ export default function CoinFlip() {
             </CardContent>
           </Card>
 
-          {/* Betting Controls */}
+          {/* Flip Controls */}
           <Card className="bg-slate-800 border-purple-500">
             <CardHeader>
-              <CardTitle className="text-white">Place Your Bet</CardTitle>
+              <CardTitle className="text-white">Make Your Call</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Choose Side */}
               <div>
-                <label className="text-white mb-2 block font-semibold">Choose Your Side</label>
+                <label className="text-white mb-2 block font-semibold">Call It!</label>
                 <div className="grid grid-cols-2 gap-3">
                   <Button
                     onClick={() => setUserChoice('heads')}
@@ -222,41 +203,15 @@ export default function CoinFlip() {
                     </div>
                   </Button>
                 </div>
-              </div>
-
-              {/* Bet Amount */}
-              <div>
-                <label className="text-white mb-2 block font-semibold">
-                  Bet Amount (Win 2x)
-                </label>
-                <div className="flex gap-2">
-                  {[1, 5, 10, 25, 50].map((amount) => (
-                    <Button
-                      key={amount}
-                      onClick={() => setBetAmount(amount)}
-                      variant={betAmount === amount ? 'default' : 'outline'}
-                      size="sm"
-                      className={
-                        betAmount === amount
-                          ? 'bg-yellow-600 hover:bg-yellow-700'
-                          : 'border-yellow-400 text-yellow-400'
-                      }
-                      disabled={!wallet || wallet.battleCredits < amount}
-                      data-testid={`button-bet-${amount}`}
-                    >
-                      {amount}
-                    </Button>
-                  ))}
-                </div>
-                <p className="text-gray-400 text-sm mt-2">
-                  Win {betAmount * 2} credits if you guess correctly!
+                <p className="text-gray-400 text-sm mt-2 text-center">
+                  Choose your side, then flip to see who goes first
                 </p>
               </div>
 
               {/* Flip Button */}
               <Button
                 onClick={handleFlip}
-                disabled={isFlipping || !wallet || wallet.battleCredits < betAmount}
+                disabled={isFlipping || !user}
                 className="w-full h-16 text-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
                 data-testid="button-flip-coin"
               >
@@ -268,20 +223,20 @@ export default function CoinFlip() {
                 ) : (
                   <>
                     <Coins className="h-6 w-6 mr-2" />
-                    Flip Coin ({betAmount} credits)
+                    Flip the Coin
                   </>
                 )}
               </Button>
 
               {/* Rules */}
               <div className="bg-slate-700 p-4 rounded-lg">
-                <h3 className="text-white font-semibold mb-2">How to Play</h3>
+                <h3 className="text-white font-semibold mb-2">How It Works</h3>
                 <ul className="text-gray-300 text-sm space-y-1">
                   <li>• Choose Rapper (Heads) or Robot (Tails)</li>
-                  <li>• Select your bet amount</li>
-                  <li>• If you win, you get 2x your bet!</li>
-                  <li>• If you lose, you lose your bet</li>
-                  <li>• Need more credits? Win battles or visit the Wallet!</li>
+                  <li>• Flip the coin to determine turn order</li>
+                  <li>• Match your choice = You go first!</li>
+                  <li>• Miss your call = Opponent goes first</li>
+                  <li>• Fair 50/50 chance every time</li>
                 </ul>
               </div>
             </CardContent>
@@ -291,20 +246,16 @@ export default function CoinFlip() {
         {/* Stats Card */}
         <Card className="bg-slate-800 border-purple-500 mt-6">
           <CardHeader>
-            <CardTitle className="text-white">Recent Activity</CardTitle>
+            <CardTitle className="text-white">Flip Statistics</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-2 gap-4 text-center">
               <div>
                 <p className="text-3xl font-bold text-purple-400">{flipCount}</p>
                 <p className="text-gray-400 text-sm">Total Flips</p>
               </div>
               <div>
-                <p className="text-3xl font-bold text-yellow-400">{wallet?.battleCredits || 0}</p>
-                <p className="text-gray-400 text-sm">Current Balance</p>
-              </div>
-              <div>
-                <p className="text-3xl font-bold text-green-400">50%</p>
+                <p className="text-3xl font-bold text-green-400">50/50</p>
                 <p className="text-gray-400 text-sm">Fair Odds</p>
               </div>
             </div>

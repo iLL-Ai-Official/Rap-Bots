@@ -264,10 +264,10 @@ export default function Home() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Coins className="h-5 w-5" />
-                Coin Flip
+                Who Goes First?
               </CardTitle>
               <CardDescription className="text-yellow-100">
-                Double or nothing! Test your luck with RapBots coin
+                Flip the coin to determine battle turn order
               </CardDescription>
             </CardHeader>
             <CardContent>

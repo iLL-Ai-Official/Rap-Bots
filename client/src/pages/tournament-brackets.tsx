@@ -4,14 +4,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { ArrowLeft, Trophy, Users, Target, Crown, Play } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 import { Tournament } from "@shared/schema";
 
 export default function TournamentBrackets() {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
 
   // Fetch active tournaments with bracket data
   const { data: tournaments, isLoading } = useQuery<Tournament[]>({
     queryKey: ['/api/tournaments/active'],
+    enabled: !!user,
   });
 
   const getTournamentProgress = (tournament: Tournament) => {

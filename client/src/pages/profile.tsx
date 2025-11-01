@@ -27,6 +27,10 @@ interface BattleHistory {
 
 export default function Profile() {
   const { user: currentUser } = useAuth();
+  const params = useParams<{ id?: string }>();
+  
+  // Check if viewing own profile (no params means own profile)
+  const isOwnProfile = !params.id || params.id === currentUser?.id;
 
   const { data: user, isLoading: userLoading } = useQuery<User>({
     queryKey: ["/api/auth/user"],

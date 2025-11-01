@@ -21,6 +21,7 @@ import {
   Send
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, queryClient as qc } from "@/lib/queryClient";
 
 interface UserWallet {
@@ -104,42 +105,50 @@ const CREDIT_PACKAGES = [
 export default function Wallet() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
   const [voiceCommandText, setVoiceCommandText] = useState("");
 
   // Fetch wallet
   const { data: wallet, isLoading: walletLoading } = useQuery<UserWallet>({
     queryKey: ['/api/wallet'],
+    enabled: !!user,
   });
 
   // Fetch transactions
   const { data: transactions = [] } = useQuery<Transaction[]>({
     queryKey: ['/api/transactions', { limit: 20 }],
+    enabled: !!user,
   });
 
   // Fetch mining events
   const { data: miningEvents = [] } = useQuery<MiningEvent[]>({
     queryKey: ['/api/mining/events', { limit: 20 }],
+    enabled: !!user,
   });
 
   // Fetch ad revenue
   const { data: adRevenue } = useQuery<{ totalRevenue: string; impressions: number }>({
     queryKey: ['/api/credits/revenue'],
+    enabled: !!user,
   });
 
   // Fetch Arc wallet
   const { data: arcWallet, isLoading: arcWalletLoading } = useQuery<ArcWallet>({
     queryKey: ['/api/arc/wallet'],
+    enabled: !!user,
   });
 
   // Fetch Arc transactions
   const { data: arcTransactions = [] } = useQuery<ArcTransaction[]>({
     queryKey: ['/api/arc/transactions', { limit: 20 }],
+    enabled: !!user,
   });
 
   // Fetch voice commands
   const { data: voiceCommands = [] } = useQuery<VoiceCommand[]>({
     queryKey: ['/api/arc/voice-commands', { limit: 20 }],
+    enabled: !!user,
   });
 
   // Claim daily bonus mutation

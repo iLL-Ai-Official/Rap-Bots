@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Bot, User, Swords } from "lucide-react";
+import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Bot, User, Swords, Coins } from "lucide-react";
 import { Link } from "wouter";
 import { SocialShare } from "@/components/SocialShare";
 
@@ -165,7 +165,7 @@ export default function Home() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="grid md:grid-cols-5 gap-4 mb-8">
           <Card className="bg-gradient-to-r from-purple-800 to-purple-600 border-purple-500 text-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -255,6 +255,25 @@ export default function Home() {
               <Link href="/clone">
                 <Button className="w-full bg-white text-blue-600 hover:bg-gray-100 font-semibold" data-testid="button-clone">
                   Manage Clone
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-r from-yellow-800 to-yellow-600 border-yellow-500 text-white">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Coins className="h-5 w-5" />
+                Coin Flip
+              </CardTitle>
+              <CardDescription className="text-yellow-100">
+                Double or nothing! Test your luck with RapBots coin
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/coinflip">
+                <Button className="w-full bg-white text-yellow-600 hover:bg-gray-100 font-semibold" data-testid="button-coinflip">
+                  Flip Coin
                 </Button>
               </Link>
             </CardContent>

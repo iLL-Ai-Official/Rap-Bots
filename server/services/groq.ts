@@ -1135,6 +1135,105 @@ ${difficulty === 'nightmare' ? '- CYPHER-9000 MODE: Cold robotic delivery with s
     // Provide fallback content that maintains exponential quality
     return `Error in exponential processing - ${context}. Advanced 120B model temporarily unavailable.`;
   }
+
+  /**
+   * Generate a verse for a clone based on its skill profile
+   */
+  async generateCloneVerse(
+    clone: {
+      cloneName: string;
+      skillLevel: number;
+      avgRhymeDensity: number;
+      avgFlowQuality: number;
+      avgCreativity: number;
+      style: string;
+    },
+    roundNumber: number,
+    opponentVerses: string[]
+  ): Promise<string> {
+    if (!this.apiKey) {
+      throw new Error("Groq API key not available for clone verse generation");
+    }
+
+    console.log(`🤖 Generating verse for ${clone.cloneName} (Skill: ${clone.skillLevel})`);
+
+    const styleDescriptions: Record<string, string> = {
+      technical: "focus on complex rhyme schemes and precise wordplay",
+      smooth: "emphasize flow quality and smooth delivery",
+      creative: "use innovative metaphors and unique perspectives",
+      aggressive: "deliver hard-hitting punchlines with intense energy",
+      balanced: "blend technical skill with creative expression"
+    };
+
+    const styleDescription = styleDescriptions[clone.style] || styleDescriptions.balanced;
+
+    const contextPrompt = opponentVerses.length > 0
+      ? `Respond to your opponent's verse:\n"${opponentVerses[opponentVerses.length - 1]}"\n\nCounter their points and attack their weaknesses.`
+      : `Start strong with an opening verse that establishes dominance.`;
+
+    const prompt = `You are ${clone.cloneName}, a battle rapper with the following stats:
+- Overall Skill: ${clone.skillLevel}/100
+- Rhyme Density: ${clone.avgRhymeDensity}/100  
+- Flow Quality: ${clone.avgFlowQuality}/100
+- Creativity: ${clone.avgCreativity}/100
+- Style: ${clone.style} - ${styleDescription}
+
+This is Round ${roundNumber} of the battle.
+
+${contextPrompt}
+
+Generate a 4-line rap battle verse that matches your skill profile exactly. Your verse should reflect your stats:
+- If rhyme density is high (>70), use complex multi-syllabic rhymes and internal rhymes
+- If flow quality is high (>70), maintain consistent rhythm and smooth transitions
+- If creativity is high (>70), use unique metaphors and unexpected wordplay
+- Match your style: ${styleDescription}
+
+Keep it exactly 4 lines. Be aggressive but clever. Make every bar count.`;
+
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${this.apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            {
+              role: "system",
+              content: "You are an expert battle rapper. Generate concise, hard-hitting 4-line verses with strong rhymes and wordplay. Never add commentary, just deliver the bars."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          max_tokens: 150,
+          temperature: 0.8,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error(`Clone verse generation failed: ${error}`);
+        throw new Error(`Clone verse generation failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      const verse = result.choices?.[0]?.message?.content?.trim() || "";
+      
+      if (!verse) {
+        throw new Error("Empty verse generated");
+      }
+
+      console.log(`✅ Generated verse for ${clone.cloneName}: "${verse.substring(0, 50)}..."`);
+      return verse;
+    } catch (error) {
+      console.error(`Error generating clone verse:`, error);
+      throw error;
+    }
+  }
 }
 
 export const groqService = new GroqService();

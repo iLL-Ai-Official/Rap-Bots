@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'wouter';
 import { Button } from '@/components/ui/button';
-import { Settings, Home, Trophy, Sword, Crown } from 'lucide-react';
+import { Settings, Home, Trophy, Sword, Crown, User } from 'lucide-react';
 
 export function Navigation() {
   return (
@@ -22,6 +22,12 @@ export function Navigation() {
         <Link href="/tournaments">
           <Button variant="outline" size="sm" className="bg-gray-800 border-gray-700 hover:bg-gray-700">
             <Trophy className="w-4 h-4" />
+          </Button>
+        </Link>
+        
+        <Link href="/profile">
+          <Button variant="outline" size="sm" className="bg-gray-800 border-gray-700 hover:bg-gray-700" data-testid="nav-profile">
+            <User className="w-4 h-4" />
           </Button>
         </Link>
         

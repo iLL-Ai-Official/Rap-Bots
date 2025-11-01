@@ -1703,6 +1703,185 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/clones/available', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const clones = await storage.getAllAvailableClones(userId);
+      
+      res.json(clones);
+    } catch (error) {
+      console.error('Error fetching available clones:', error);
+      res.status(500).json({ message: 'Failed to fetch available clones' });
+    }
+  });
+
+  app.post('/api/clone-battles/start', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { opponentCloneId } = req.body;
+
+      if (!opponentCloneId) {
+        return res.status(400).json({ message: 'Opponent clone ID is required' });
+      }
+
+      const userClone = await storage.getUserClone(userId);
+      if (!userClone) {
+        return res.status(400).json({ message: 'You need to create your clone first!' });
+      }
+
+      const opponentClone = await storage.getCloneById(opponentCloneId);
+      if (!opponentClone) {
+        return res.status(404).json({ message: 'Opponent clone not found' });
+      }
+
+      const canStartBattle = await storage.deductBattleCredits(userId, 1);
+      if (!canStartBattle) {
+        return res.status(403).json({ 
+          message: 'Insufficient battle credits. Purchase more to continue!' 
+        });
+      }
+
+      const battle = await storage.createBattle({
+        mode: 'clone-vs-clone',
+        userId,
+        challengerUserId: userClone.userId,
+        opponentUserId: opponentClone.userId,
+        difficulty: 'normal',
+        profanityFilter: false,
+        maxRounds: 3,
+        lyricComplexity: Math.round((userClone.skillLevel + opponentClone.skillLevel) / 2),
+        styleIntensity: 50,
+        status: 'active',
+        creditsPaid: true,
+      });
+
+      console.log(`🤖 Clone battle started: ${userClone.cloneName} vs ${opponentClone.cloneName} (Battle: ${battle.id})`);
+
+      res.json({
+        battleId: battle.id,
+        userClone,
+        opponentClone,
+        message: `Battle started: ${userClone.cloneName} vs ${opponentClone.cloneName}`,
+      });
+    } catch (error) {
+      console.error('Error starting clone battle:', error);
+      res.status(500).json({ message: 'Failed to start clone battle' });
+    }
+  });
+
+  app.post('/api/clone-battles/:battleId/round', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { battleId } = req.params;
+      const { roundNumber } = req.body;
+
+      const battle = await storage.getBattle(battleId);
+      if (!battle) {
+        return res.status(404).json({ message: 'Battle not found' });
+      }
+
+      if (battle.status !== 'active') {
+        return res.status(400).json({ message: 'Battle is not active' });
+      }
+
+      const userClone = await storage.getUserClone(battle.challengerUserId!);
+      const opponentClone = await storage.getCloneById(battle.opponentUserId!);
+
+      if (!userClone || !opponentClone) {
+        return res.status(404).json({ message: 'Clone data not found' });
+      }
+
+      const userVerseResponse = await groqService.generateCloneVerse(userClone, roundNumber, []);
+      const opponentVerseResponse = await groqService.generateCloneVerse(opponentClone, roundNumber, [userVerseResponse]);
+
+      const userScores = await scoringService.scoreVerse(userVerseResponse);
+      const opponentScores = await scoringService.scoreVerse(opponentVerseResponse);
+
+      const roundData = {
+        id: `round_${Date.now()}`,
+        battleId,
+        roundNumber,
+        userVerse: userVerseResponse,
+        aiVerse: opponentVerseResponse,
+        userAudioUrl: null,
+        aiAudioUrl: null,
+        scores: {
+          userScore: userScores.totalScore,
+          aiScore: opponentScores.totalScore,
+          rhymeDensity: (userScores.rhymeDensity + opponentScores.rhymeDensity) / 2,
+          flowQuality: (userScores.flowQuality + opponentScores.flowQuality) / 2,
+          creativity: (userScores.creativity + opponentScores.creativity) / 2,
+          totalScore: (userScores.totalScore + opponentScores.totalScore) / 2,
+        },
+        createdAt: new Date(),
+      };
+
+      await storage.addBattleRound(battleId, roundData);
+
+      const newUserScore = (battle.challengerScore || 0) + userScores.totalScore;
+      const newOpponentScore = (battle.opponentScore || 0) + opponentScores.totalScore;
+      await storage.updateBattleState(battleId, {
+        challengerScore: newUserScore,
+        opponentScore: newOpponentScore,
+      });
+
+      res.json({
+        round: roundData,
+        userClone: {
+          verse: userVerseResponse,
+          scores: userScores,
+        },
+        opponentClone: {
+          verse: opponentVerseResponse,
+          scores: opponentScores,
+        },
+        battleScore: {
+          userScore: newUserScore,
+          opponentScore: newOpponentScore,
+        },
+      });
+    } catch (error) {
+      console.error('Error processing clone battle round:', error);
+      res.status(500).json({ message: 'Failed to process clone battle round' });
+    }
+  });
+
+  app.post('/api/clone-battles/:battleId/complete', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { battleId } = req.params;
+
+      const battle = await storage.getBattle(battleId);
+      if (!battle) {
+        return res.status(404).json({ message: 'Battle not found' });
+      }
+
+      const winnerId = (battle.challengerScore || 0) > (battle.opponentScore || 0)
+        ? battle.challengerUserId
+        : battle.opponentUserId;
+
+      await storage.completePvPBattle(battleId, winnerId || '');
+
+      const didUserCloneWin = winnerId === battle.challengerUserId;
+      if (didUserCloneWin) {
+        await storage.awardBattleRewards(userId, battleId, true);
+      }
+
+      res.json({
+        message: 'Clone battle completed',
+        winnerId,
+        didUserCloneWin,
+        finalScore: {
+          userScore: battle.challengerScore,
+          opponentScore: battle.opponentScore,
+        },
+      });
+    } catch (error) {
+      console.error('Error completing clone battle:', error);
+      res.status(500).json({ message: 'Failed to complete clone battle' });
+    }
+  });
+
   // ======================
   // MONETIZATION ENDPOINTS
   // ======================
@@ -2210,6 +2389,371 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error('Error awarding battle USDC:', error);
       res.status(500).json({ message: 'Failed to award USDC', error: error.message });
+    }
+  });
+
+  // ===========================
+  // PvP BATTLE SYSTEM ROUTES
+  // ===========================
+
+  // Create battle invite
+  app.post('/api/pvp/challenges', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { opponentId, settings } = req.body;
+
+      if (!opponentId) {
+        return res.status(400).json({ message: 'Opponent ID is required' });
+      }
+
+      // Check opponent exists
+      const opponent = await storage.getUser(opponentId);
+      if (!opponent) {
+        return res.status(404).json({ message: 'Opponent not found' });
+      }
+
+      // Create invite that expires in 24 hours
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 24);
+
+      const invite = await storage.createBattleInvite({
+        challengerId: userId,
+        opponentId,
+        settings: settings || {},
+        status: 'pending',
+        expiresAt,
+      });
+
+      console.log(`⚔️ User ${userId} challenged ${opponentId} to PvP battle`);
+      res.json(invite);
+    } catch (error: any) {
+      console.error('Error creating battle invite:', error);
+      res.status(500).json({ message: 'Failed to create battle invite', error: error.message });
+    }
+  });
+
+  // Get user's battle invites
+  app.get('/api/pvp/challenges', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const type = (req.query.type as 'sent' | 'received' | 'all') || 'all';
+
+      const invites = await storage.getUserBattleInvites(userId, type);
+
+      // Attach user info to each invite
+      const invitesWithUsers = await Promise.all(
+        invites.map(async (invite) => {
+          const challenger = await storage.getUser(invite.challengerId);
+          const opponent = await storage.getUser(invite.opponentId);
+          return {
+            ...invite,
+            challenger: {
+              id: challenger?.id,
+              firstName: challenger?.firstName,
+              lastName: challenger?.lastName,
+              profileImageUrl: challenger?.profileImageUrl,
+            },
+            opponent: {
+              id: opponent?.id,
+              firstName: opponent?.firstName,
+              lastName: opponent?.lastName,
+              profileImageUrl: opponent?.profileImageUrl,
+            },
+          };
+        })
+      );
+
+      res.json(invitesWithUsers);
+    } catch (error: any) {
+      console.error('Error getting battle invites:', error);
+      res.status(500).json({ message: 'Failed to get battle invites', error: error.message });
+    }
+  });
+
+  // Accept battle invite
+  app.post('/api/pvp/challenges/:id/accept', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const inviteId = req.params.id;
+
+      const invite = await storage.getBattleInvite(inviteId);
+      if (!invite) {
+        return res.status(404).json({ message: 'Invite not found' });
+      }
+
+      if (invite.opponentId !== userId) {
+        return res.status(403).json({ message: 'You cannot accept this invite' });
+      }
+
+      if (invite.status !== 'pending') {
+        return res.status(400).json({ message: 'Invite is no longer pending' });
+      }
+
+      if (new Date() > invite.expiresAt) {
+        await storage.updateBattleInviteStatus(inviteId, 'expired');
+        return res.status(400).json({ message: 'Invite has expired' });
+      }
+
+      // Deduct credits from both players
+      const creditsPerPlayer = invite.settings.creditsPerPlayer || 1;
+      const challengerDeducted = await storage.deductBattleCredits(invite.challengerId, creditsPerPlayer);
+      const opponentDeducted = await storage.deductBattleCredits(userId, creditsPerPlayer);
+
+      if (!challengerDeducted || !opponentDeducted) {
+        return res.status(402).json({ 
+          message: 'Insufficient credits for one or both players',
+          requiresCredits: true 
+        });
+      }
+
+      // Create PvP battle
+      const battle = await storage.createBattle({
+        mode: 'pvp',
+        challengerUserId: invite.challengerId,
+        opponentUserId: userId,
+        currentTurnUserId: invite.challengerId, // Challenger goes first
+        challengerScore: 0,
+        opponentScore: 0,
+        maxRounds: invite.settings.maxRounds || 5,
+        creditsPerPlayer,
+        difficulty: invite.settings.difficulty || 'normal',
+        profanityFilter: invite.settings.profanityFilter || false,
+        lyricComplexity: invite.settings.lyricComplexity || 50,
+        styleIntensity: invite.settings.styleIntensity || 50,
+        creditsPaid: true,
+        status: 'active',
+        rounds: [],
+      });
+
+      // Update invite status
+      await storage.updateBattleInviteStatus(inviteId, 'accepted', battle.id);
+
+      console.log(`⚔️ PvP battle ${battle.id} started: ${invite.challengerId} vs ${userId}`);
+      res.json(battle);
+    } catch (error: any) {
+      console.error('Error accepting battle invite:', error);
+      res.status(500).json({ message: 'Failed to accept battle invite', error: error.message });
+    }
+  });
+
+  // Decline battle invite
+  app.post('/api/pvp/challenges/:id/decline', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const inviteId = req.params.id;
+
+      const invite = await storage.getBattleInvite(inviteId);
+      if (!invite) {
+        return res.status(404).json({ message: 'Invite not found' });
+      }
+
+      if (invite.opponentId !== userId) {
+        return res.status(403).json({ message: 'You cannot decline this invite' });
+      }
+
+      await storage.updateBattleInviteStatus(inviteId, 'declined');
+
+      console.log(`⚔️ User ${userId} declined battle invite from ${invite.challengerId}`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error declining battle invite:', error);
+      res.status(500).json({ message: 'Failed to decline battle invite', error: error.message });
+    }
+  });
+
+  // Get active PvP battles for user
+  app.get('/api/pvp/battles', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const battles = await storage.getActivePvPBattles(userId);
+
+      // Attach opponent info to each battle
+      const battlesWithOpponents = await Promise.all(
+        battles.map(async (battle) => {
+          const opponentId = battle.challengerUserId === userId 
+            ? battle.opponentUserId 
+            : battle.challengerUserId;
+          const opponent = opponentId ? await storage.getUser(opponentId) : null;
+          
+          return {
+            ...battle,
+            opponent: opponent ? {
+              id: opponent.id,
+              firstName: opponent.firstName,
+              lastName: opponent.lastName,
+              profileImageUrl: opponent.profileImageUrl,
+            } : null,
+          };
+        })
+      );
+
+      res.json(battlesWithOpponents);
+    } catch (error: any) {
+      console.error('Error getting PvP battles:', error);
+      res.status(500).json({ message: 'Failed to get PvP battles', error: error.message });
+    }
+  });
+
+  // Get specific PvP battle with submissions
+  app.get('/api/pvp/battles/:id', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const battleId = req.params.id;
+
+      const battle = await storage.getPvPBattle(battleId);
+      if (!battle) {
+        return res.status(404).json({ message: 'Battle not found' });
+      }
+
+      // Verify user is part of this battle
+      if (battle.challengerUserId !== userId && battle.opponentUserId !== userId) {
+        return res.status(403).json({ message: 'You are not part of this battle' });
+      }
+
+      // Get all round submissions
+      const currentRound = Math.floor((await db.select().from(battleRoundSubmissions).where(eq(battleRoundSubmissions.battleId, battleId))).length / 2) + 1;
+      const roundSubmissions = await storage.getRoundSubmissions(battleId, currentRound);
+
+      // Get opponent info
+      const opponentId = battle.challengerUserId === userId ? battle.opponentUserId : battle.challengerUserId;
+      const opponent = opponentId ? await storage.getUser(opponentId) : null;
+
+      res.json({
+        ...battle,
+        currentRound,
+        roundSubmissions,
+        opponent: opponent ? {
+          id: opponent.id,
+          firstName: opponent.firstName,
+          lastName: opponent.lastName,
+          profileImageUrl: opponent.profileImageUrl,
+        } : null,
+        isYourTurn: battle.currentTurnUserId === userId,
+      });
+    } catch (error: any) {
+      console.error('Error getting PvP battle:', error);
+      res.status(500).json({ message: 'Failed to get PvP battle', error: error.message });
+    }
+  });
+
+  // Submit round verse for PvP battle
+  app.post('/api/pvp/battles/:id/rounds/:roundNumber/submit', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const battleId = req.params.id;
+      const roundNumber = parseInt(req.params.roundNumber);
+      const { verse, audioUrl } = req.body;
+
+      if (!verse) {
+        return res.status(400).json({ message: 'Verse is required' });
+      }
+
+      const battle = await storage.getPvPBattle(battleId);
+      if (!battle) {
+        return res.status(404).json({ message: 'Battle not found' });
+      }
+
+      // Verify user is part of this battle
+      if (battle.challengerUserId !== userId && battle.opponentUserId !== userId) {
+        return res.status(403).json({ message: 'You are not part of this battle' });
+      }
+
+      // Check if user already submitted for this round
+      const existingSubmissions = await storage.getRoundSubmissions(battleId, roundNumber);
+      if (existingSubmissions.some(s => s.userId === userId)) {
+        return res.status(400).json({ message: 'You have already submitted for this round' });
+      }
+
+      // Determine role
+      const role = battle.challengerUserId === userId ? 'challenger' : 'opponent';
+
+      // Score the verse using existing scoring service
+      const analysis = await scoringService.scoreVerse(verse, battle.difficulty as any, {
+        profanityFilter: battle.profanityFilter || false,
+      });
+
+      // Create submission
+      const submission = await storage.createRoundSubmission({
+        battleId,
+        roundNumber,
+        userId,
+        role,
+        verse,
+        audioUrl,
+        scores: {
+          rhymeDensity: analysis.rhymeDensity,
+          flowQuality: analysis.flowQuality,
+          creativity: analysis.creativity,
+          totalScore: analysis.totalScore,
+        },
+      });
+
+      // Check if both players have submitted
+      const bothSubmitted = await storage.checkBothSubmissionsExist(battleId, roundNumber);
+
+      if (bothSubmitted) {
+        // Process the round and update scores
+        await storage.processPvPRound(battleId, roundNumber);
+        
+        // Switch turn to other player
+        const nextTurn = battle.currentTurnUserId === battle.challengerUserId 
+          ? battle.opponentUserId 
+          : battle.challengerUserId;
+        
+        await db.update(battles)
+          .set({ currentTurnUserId: nextTurn })
+          .where(eq(battles.id, battleId));
+      }
+
+      res.json({
+        submission,
+        bothSubmitted,
+        analysis,
+      });
+    } catch (error: any) {
+      console.error('Error submitting round:', error);
+      res.status(500).json({ message: 'Failed to submit round', error: error.message });
+    }
+  });
+
+  // Forfeit PvP battle
+  app.post('/api/pvp/battles/:id/forfeit', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const battleId = req.params.id;
+
+      const battle = await storage.getPvPBattle(battleId);
+      if (!battle) {
+        return res.status(404).json({ message: 'Battle not found' });
+      }
+
+      // Verify user is part of this battle
+      if (battle.challengerUserId !== userId && battle.opponentUserId !== userId) {
+        return res.status(403).json({ message: 'You are not part of this battle' });
+      }
+
+      if (battle.status !== 'active') {
+        return res.status(400).json({ message: 'Battle is not active' });
+      }
+
+      await storage.forfeitPvPBattle(battleId, userId);
+
+      console.log(`⚔️ User ${userId} forfeited battle ${battleId}`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error forfeiting battle:', error);
+      res.status(500).json({ message: 'Failed to forfeit battle', error: error.message });
+    }
+  });
+
+  // Cleanup expired invites periodically (can be called by a cron job or manually)
+  app.post('/api/pvp/cleanup-invites', async (req, res) => {
+    try {
+      await storage.expireOldInvites();
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error cleaning up invites:', error);
+      res.status(500).json({ message: 'Failed to cleanup invites', error: error.message });
     }
   });
 

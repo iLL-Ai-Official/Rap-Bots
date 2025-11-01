@@ -1,6 +1,8 @@
 import {
   users,
   battles,
+  battleInvites,
+  battleRoundSubmissions,
   tournaments,
   tournamentBattles,
   referrals,
@@ -17,6 +19,10 @@ import {
   type UpsertUser,
   type Battle,
   type InsertBattle,
+  type BattleInvite,
+  type InsertBattleInvite,
+  type BattleRoundSubmission,
+  type InsertBattleRoundSubmission,
   type Tournament,
   type InsertTournament,
   type TournamentBattle,
@@ -124,6 +130,7 @@ export interface IStorage {
   getUserClone(userId: string): Promise<UserClone | undefined>;
   createOrUpdateUserClone(userId: string, battlesLimit?: number): Promise<UserClone>;
   getCloneById(cloneId: string): Promise<UserClone | undefined>;
+  getAllAvailableClones(excludeUserId?: string): Promise<Array<UserClone & { ownerUsername: string }>>;
 
   // Monetization operations - Wallet
   getUserWallet(userId: string): Promise<UserWallet | undefined>;
@@ -173,6 +180,27 @@ export interface IStorage {
     audioUrl?: string;
     executedAt?: Date;
   }): Promise<VoiceCommand>;
+
+  // PvP Battle Invites
+  createBattleInvite(invite: InsertBattleInvite): Promise<BattleInvite>;
+  getBattleInvite(id: string): Promise<BattleInvite | undefined>;
+  getUserBattleInvites(userId: string, type: 'sent' | 'received' | 'all'): Promise<BattleInvite[]>;
+  updateBattleInviteStatus(inviteId: string, status: string, battleId?: string): Promise<BattleInvite>;
+  expireOldInvites(): Promise<void>;
+
+  // PvP Battle Round Submissions
+  createRoundSubmission(submission: InsertBattleRoundSubmission): Promise<BattleRoundSubmission>;
+  getRoundSubmissions(battleId: string, roundNumber: number): Promise<BattleRoundSubmission[]>;
+  checkBothSubmissionsExist(battleId: string, roundNumber: number): Promise<boolean>;
+  processPvPRound(battleId: string, roundNumber: number): Promise<void>;
+  updatePvPBattleScores(battleId: string, challengerScore: number, opponentScore: number): Promise<void>;
+  completePvPBattle(battleId: string, winnerId: string): Promise<void>;
+  forfeitPvPBattle(battleId: string, userId: string): Promise<void>;
+  
+  // PvP Battle queries
+  getPvPBattle(battleId: string): Promise<Battle | undefined>;
+  getUserPvPBattles(userId: string): Promise<Battle[]>;
+  getActivePvPBattles(userId: string): Promise<Battle[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -957,6 +985,44 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  async getAllAvailableClones(excludeUserId?: string): Promise<Array<UserClone & { ownerUsername: string }>> {
+    try {
+      const clones = await db
+        .select({
+          id: userClones.id,
+          userId: userClones.userId,
+          cloneName: userClones.cloneName,
+          skillLevel: userClones.skillLevel,
+          avgRhymeDensity: userClones.avgRhymeDensity,
+          avgFlowQuality: userClones.avgFlowQuality,
+          avgCreativity: userClones.avgCreativity,
+          battlesAnalyzed: userClones.battlesAnalyzed,
+          style: userClones.style,
+          voiceId: userClones.voiceId,
+          isActive: userClones.isActive,
+          createdAt: userClones.createdAt,
+          updatedAt: userClones.updatedAt,
+          ownerUsername: sql<string>`COALESCE(${users.username}, ${users.email}, 'Anonymous')`,
+        })
+        .from(userClones)
+        .leftJoin(users, eq(userClones.userId, users.id))
+        .where(
+          excludeUserId 
+            ? and(
+                eq(userClones.isActive, true),
+                sql`${userClones.userId} != ${excludeUserId}`
+              )
+            : eq(userClones.isActive, true)
+        )
+        .orderBy(desc(userClones.skillLevel));
+      
+      return clones;
+    } catch (error) {
+      console.error('Error fetching all available clones:', error);
+      throw error;
+    }
+  }
+
   // ====================
   // MONETIZATION OPERATIONS
   // ====================
@@ -1446,6 +1512,299 @@ export class DatabaseStorage implements IStorage {
       { maxAttempts: 3 },
       `updateVoiceCommand for ${commandId}`
     );
+  }
+
+  // ===========================
+  // PvP Battle Invite operations
+  // ===========================
+  
+  async createBattleInvite(invite: InsertBattleInvite): Promise<BattleInvite> {
+    return withRetry(
+      async () => {
+        const [created] = await db
+          .insert(battleInvites)
+          .values(invite)
+          .returning();
+        
+        console.log(`⚔️ Created PvP battle invite from ${invite.challengerId} to ${invite.opponentId}`);
+        return created;
+      },
+      { maxAttempts: 3 },
+      `createBattleInvite`
+    );
+  }
+
+  async getBattleInvite(id: string): Promise<BattleInvite | undefined> {
+    const [invite] = await db
+      .select()
+      .from(battleInvites)
+      .where(eq(battleInvites.id, id));
+    return invite;
+  }
+
+  async getUserBattleInvites(userId: string, type: 'sent' | 'received' | 'all'): Promise<BattleInvite[]> {
+    let query = db.select().from(battleInvites);
+    
+    if (type === 'sent') {
+      query = query.where(eq(battleInvites.challengerId, userId));
+    } else if (type === 'received') {
+      query = query.where(eq(battleInvites.opponentId, userId));
+    } else {
+      query = query.where(
+        sql`${battleInvites.challengerId} = ${userId} OR ${battleInvites.opponentId} = ${userId}`
+      );
+    }
+    
+    const invites = await query
+      .orderBy(desc(battleInvites.createdAt))
+      .limit(50);
+    
+    return invites;
+  }
+
+  async updateBattleInviteStatus(inviteId: string, status: string, battleId?: string): Promise<BattleInvite> {
+    return withRetry(
+      async () => {
+        const [updated] = await db
+          .update(battleInvites)
+          .set({
+            status,
+            battleId,
+            updatedAt: new Date(),
+          })
+          .where(eq(battleInvites.id, inviteId))
+          .returning();
+        
+        console.log(`⚔️ Updated battle invite ${inviteId}: ${status}`);
+        return updated;
+      },
+      { maxAttempts: 3 },
+      `updateBattleInviteStatus`
+    );
+  }
+
+  async expireOldInvites(): Promise<void> {
+    await db
+      .update(battleInvites)
+      .set({ status: 'expired', updatedAt: new Date() })
+      .where(
+        and(
+          eq(battleInvites.status, 'pending'),
+          lt(battleInvites.expiresAt, new Date())
+        )
+      );
+    
+    console.log(`⚔️ Expired old pending battle invites`);
+  }
+
+  // ===========================
+  // PvP Round Submission operations
+  // ===========================
+
+  async createRoundSubmission(submission: InsertBattleRoundSubmission): Promise<BattleRoundSubmission> {
+    return withRetry(
+      async () => {
+        const [created] = await db
+          .insert(battleRoundSubmissions)
+          .values(submission)
+          .returning();
+        
+        console.log(`⚔️ Created round submission: Battle ${submission.battleId}, Round ${submission.roundNumber}, User ${submission.userId}`);
+        return created;
+      },
+      { maxAttempts: 3 },
+      `createRoundSubmission`
+    );
+  }
+
+  async getRoundSubmissions(battleId: string, roundNumber: number): Promise<BattleRoundSubmission[]> {
+    const submissions = await db
+      .select()
+      .from(battleRoundSubmissions)
+      .where(
+        and(
+          eq(battleRoundSubmissions.battleId, battleId),
+          eq(battleRoundSubmissions.roundNumber, roundNumber)
+        )
+      );
+    
+    return submissions;
+  }
+
+  async checkBothSubmissionsExist(battleId: string, roundNumber: number): Promise<boolean> {
+    const submissions = await this.getRoundSubmissions(battleId, roundNumber);
+    return submissions.length === 2;
+  }
+
+  async processPvPRound(battleId: string, roundNumber: number): Promise<void> {
+    return withRetry(
+      async () => {
+        const submissions = await this.getRoundSubmissions(battleId, roundNumber);
+        
+        if (submissions.length !== 2) {
+          throw new Error(`Cannot process round: Expected 2 submissions, got ${submissions.length}`);
+        }
+
+        // Get battle to determine roles
+        const battle = await this.getBattle(battleId);
+        if (!battle) {
+          throw new Error(`Battle ${battleId} not found`);
+        }
+
+        // Calculate cumulative scores
+        const challengerSubmission = submissions.find(s => s.userId === battle.challengerUserId);
+        const opponentSubmission = submissions.find(s => s.userId === battle.opponentUserId);
+
+        if (!challengerSubmission || !opponentSubmission) {
+          throw new Error('Could not find submissions for both players');
+        }
+
+        const challengerRoundScore = challengerSubmission.scores?.totalScore || 0;
+        const opponentRoundScore = opponentSubmission.scores?.totalScore || 0;
+
+        // Update cumulative battle scores
+        const newChallengerScore = (battle.challengerScore || 0) + challengerRoundScore;
+        const newOpponentScore = (battle.opponentScore || 0) + opponentRoundScore;
+
+        await this.updatePvPBattleScores(battleId, newChallengerScore, newOpponentScore);
+
+        // Check if battle is complete
+        if (roundNumber >= (battle.maxRounds || 5)) {
+          const winnerId = newChallengerScore > newOpponentScore 
+            ? battle.challengerUserId 
+            : newOpponentScore > newChallengerScore 
+              ? battle.opponentUserId 
+              : null; // tie
+          
+          if (winnerId) {
+            await this.completePvPBattle(battleId, winnerId);
+          } else {
+            // Handle tie - mark as completed without winner
+            await db
+              .update(battles)
+              .set({
+                status: 'completed',
+                completedAt: new Date(),
+              })
+              .where(eq(battles.id, battleId));
+          }
+        }
+
+        console.log(`⚔️ Processed PvP round ${roundNumber} for battle ${battleId}`);
+      },
+      { maxAttempts: 3 },
+      `processPvPRound`
+    );
+  }
+
+  async updatePvPBattleScores(battleId: string, challengerScore: number, opponentScore: number): Promise<void> {
+    await db
+      .update(battles)
+      .set({
+        challengerScore,
+        opponentScore,
+      })
+      .where(eq(battles.id, battleId));
+    
+    console.log(`⚔️ Updated PvP battle scores: Challenger ${challengerScore}, Opponent ${opponentScore}`);
+  }
+
+  async completePvPBattle(battleId: string, winnerId: string): Promise<void> {
+    return withRetry(
+      async () => {
+        await db
+          .update(battles)
+          .set({
+            status: 'completed',
+            winnerUserId: winnerId,
+            completedAt: new Date(),
+          })
+          .where(eq(battles.id, battleId));
+
+        console.log(`⚔️ Completed PvP battle ${battleId}, winner: ${winnerId}`);
+      },
+      { maxAttempts: 3 },
+      `completePvPBattle`
+    );
+  }
+
+  async forfeitPvPBattle(battleId: string, userId: string): Promise<void> {
+    return withRetry(
+      async () => {
+        const battle = await this.getBattle(battleId);
+        if (!battle) {
+          throw new Error(`Battle ${battleId} not found`);
+        }
+
+        // Determine winner (the other player)
+        const winnerId = battle.challengerUserId === userId 
+          ? battle.opponentUserId 
+          : battle.challengerUserId;
+
+        await db
+          .update(battles)
+          .set({
+            status: 'completed',
+            winnerUserId: winnerId,
+            completedAt: new Date(),
+          })
+          .where(eq(battles.id, battleId));
+
+        console.log(`⚔️ User ${userId} forfeited battle ${battleId}, winner: ${winnerId}`);
+      },
+      { maxAttempts: 3 },
+      `forfeitPvPBattle`
+    );
+  }
+
+  // ===========================
+  // PvP Battle queries
+  // ===========================
+
+  async getPvPBattle(battleId: string): Promise<Battle | undefined> {
+    const [battle] = await db
+      .select()
+      .from(battles)
+      .where(
+        and(
+          eq(battles.id, battleId),
+          eq(battles.mode, 'pvp')
+        )
+      );
+    
+    return battle;
+  }
+
+  async getUserPvPBattles(userId: string): Promise<Battle[]> {
+    const pvpBattles = await db
+      .select()
+      .from(battles)
+      .where(
+        and(
+          eq(battles.mode, 'pvp'),
+          sql`(${battles.challengerUserId} = ${userId} OR ${battles.opponentUserId} = ${userId})`
+        )
+      )
+      .orderBy(desc(battles.createdAt))
+      .limit(50);
+    
+    return pvpBattles;
+  }
+
+  async getActivePvPBattles(userId: string): Promise<Battle[]> {
+    const activeBattles = await db
+      .select()
+      .from(battles)
+      .where(
+        and(
+          eq(battles.mode, 'pvp'),
+          eq(battles.status, 'active'),
+          sql`(${battles.challengerUserId} = ${userId} OR ${battles.opponentUserId} = ${userId})`
+        )
+      )
+      .orderBy(desc(battles.createdAt));
+    
+    return activeBattles;
   }
 }
 

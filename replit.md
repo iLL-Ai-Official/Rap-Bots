@@ -16,6 +16,24 @@ The application is built with a clear separation between frontend and backend se
 
 ## Recent Changes
 
+### November 1, 2025 (Latest) - Battle System Expansion: PvP, Random Matchmaking, Profiles & Clone Battles
+- **Random Opponent Selection**: Added "Random Match" button to character selector for quick battles against random AI characters
+- **User Profile Pages**: New /profile page displaying user stats, battle history, subscription tier, and Arc wallet balance
+- **Complete PvP Battle System**: Full player-vs-player battles with asynchronous turn-based gameplay
+  - 3 new database tables: battleInvites, battleRoundSubmissions, extended battles table with PvP fields
+  - 8 new API endpoints for invites, matchmaking, round submissions, forfeit
+  - PvP Lobby UI (/pvp) with matchmaking, sent/received invites, and active battles
+  - BattleArena updated to support both AI and PvP modes with turn indicators and async submission flow
+  - Both players pay 1 credit to battle, credit-gated system
+- **Clone vs Clone Battles**: Spectator mode where users watch their AI clone battle other users' clones
+  - Fully automated AI-generated battles using clone skill profiles
+  - 3-round auto-progressing spectator experience
+  - Users pay 1 credit to watch clone battles
+  - Clone selection UI showing all available clones from other users
+- **Database**: 20 total tables (added battleInvites, battleRoundSubmissions, extended battles)
+- **TTS Autoplay**: Confirmed working correctly - AudioAutoplayGate + SimpleAudioPlayer ensures one-time permission then automatic playback
+- **App Status**: Fully functional on port 5000 with 17 pages, all new battle modes operational
+
 ### November 1, 2025 (Later) - Arc Blockchain & ElevenLabs Hackathon Integration
 **"AI Agents on Arc with USDC" Hackathon (Oct 27 - Nov 9, 2025)**
 - **Arc Blockchain Integration**: Added USDC payment system on Circle's Arc L1 blockchain

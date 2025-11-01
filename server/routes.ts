@@ -1701,6 +1701,228 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ======================
+  // MONETIZATION ENDPOINTS
+  // ======================
+
+  // Get user's wallet
+  app.get('/api/wallet', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const wallet = await storage.getOrCreateUserWallet(userId);
+      
+      res.json(wallet);
+    } catch (error) {
+      console.error('Error fetching wallet:', error);
+      res.status(500).json({ message: 'Failed to fetch wallet' });
+    }
+  });
+
+  // Get user's transactions
+  app.get('/api/transactions', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const transactions = await storage.getUserTransactions(userId, limit);
+      
+      res.json(transactions);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      res.status(500).json({ message: 'Failed to fetch transactions' });
+    }
+  });
+
+  // Get user's mining events
+  app.get('/api/mining/events', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const events = await storage.getUserMiningEvents(userId, limit);
+      
+      res.json(events);
+    } catch (error) {
+      console.error('Error fetching mining events:', error);
+      res.status(500).json({ message: 'Failed to fetch mining events' });
+    }
+  });
+
+  // Claim daily login bonus
+  app.post('/api/mining/daily-login', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Check if already claimed today
+      const wallet = await storage.getOrCreateUserWallet(userId);
+      
+      const now = new Date();
+      const lastClaim = wallet.lastDailyBonusAt ? new Date(wallet.lastDailyBonusAt) : null;
+      
+      // Check if claimed in last 24 hours
+      if (lastClaim) {
+        const hoursSinceLastClaim = (now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60);
+        if (hoursSinceLastClaim < 24) {
+          const hoursRemaining = Math.ceil(24 - hoursSinceLastClaim);
+          return res.status(429).json({ 
+            message: `Daily bonus already claimed. Try again in ${hoursRemaining} hours.`,
+            nextClaimAt: new Date(lastClaim.getTime() + 24 * 60 * 60 * 1000),
+          });
+        }
+      }
+      
+      // Award tokens
+      const result = await storage.awardMiningTokens(userId, "daily_login");
+      
+      // Award credits
+      const { CREDIT_REWARDS } = await import('@shared/schema');
+      const newBalance = wallet.battleCredits + CREDIT_REWARDS.DAILY_LOGIN;
+      await storage.updateWalletBalance(userId, { battleCredits: newBalance });
+      
+      // Update last claim timestamp
+      const { db } = await import('./db');
+      const { userWallets } = await import('@shared/schema');
+      const { eq } = await import('drizzle-orm');
+      
+      await db
+        .update(userWallets)
+        .set({ lastDailyBonusAt: now })
+        .where(eq(userWallets.userId, userId));
+      
+      await storage.recordTransaction({
+        userId,
+        type: "mining",
+        amount: CREDIT_REWARDS.DAILY_LOGIN.toString(),
+        currency: "credits",
+        description: "Daily login bonus credits",
+      });
+      
+      console.log(`🎁 User ${userId} claimed daily bonus`);
+      
+      res.json({ 
+        tokens: result.tokens,
+        credits: CREDIT_REWARDS.DAILY_LOGIN,
+        message: 'Daily bonus claimed!' 
+      });
+    } catch (error) {
+      console.error('Error claiming daily bonus:', error);
+      res.status(500).json({ message: 'Failed to claim daily bonus' });
+    }
+  });
+
+  // Get clone ad revenue
+  app.get('/api/credits/revenue', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const revenue = await storage.getCloneAdRevenue(userId);
+      
+      res.json(revenue);
+    } catch (error) {
+      console.error('Error fetching ad revenue:', error);
+      res.status(500).json({ message: 'Failed to fetch ad revenue' });
+    }
+  });
+
+  // Purchase credits (Stripe integration)
+  app.post('/api/credits/purchase', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { packageIndex } = req.body;
+      
+      if (!stripe) {
+        return res.status(503).json({ 
+          message: 'Payment system unavailable in development mode. Please configure STRIPE_SECRET_KEY.' 
+        });
+      }
+
+      const { MONETIZATION_CONFIG } = await import('@shared/schema');
+      const pkg = MONETIZATION_CONFIG.CREDIT_PACKAGES[packageIndex];
+      
+      if (!pkg) {
+        return res.status(400).json({ message: 'Invalid package' });
+      }
+
+      // Get or create Stripe customer
+      const user = await storage.getUser(userId);
+      let customerId = user?.stripeCustomerId;
+
+      if (!customerId) {
+        const customer = await stripe.customers.create({
+          email: user?.email || undefined,
+          metadata: { userId }
+        });
+        customerId = customer.id;
+        await storage.updateUser(userId, { stripeCustomerId: customerId });
+      }
+
+      // Create payment intent
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(pkg.price * 100),
+        currency: 'usd',
+        customer: customerId,
+        metadata: {
+          userId,
+          credits: pkg.credits + pkg.bonus,
+          packageIndex: packageIndex.toString(),
+        }
+      });
+
+      res.json({ 
+        clientSecret: paymentIntent.client_secret,
+        package: pkg 
+      });
+    } catch (error) {
+      console.error('Error creating payment intent:', error);
+      res.status(500).json({ message: 'Failed to create payment' });
+    }
+  });
+
+  // Webhook for credit purchase completion
+  app.post('/api/credits/webhook', async (req, res) => {
+    try {
+      if (!stripe) {
+        return res.status(503).json({ message: 'Stripe not configured' });
+      }
+
+      const sig = req.headers['stripe-signature'];
+      const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+      if (!sig || !webhookSecret) {
+        return res.status(400).json({ message: 'Missing signature or webhook secret' });
+      }
+
+      const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+
+      if (event.type === 'payment_intent.succeeded') {
+        const paymentIntent = event.data.object as any;
+        const { userId, credits } = paymentIntent.metadata;
+
+        if (userId && credits) {
+          // Award credits
+          const wallet = await storage.getOrCreateUserWallet(userId);
+          const newBalance = wallet.battleCredits + parseInt(credits);
+          await storage.updateWalletBalance(userId, { battleCredits: newBalance });
+
+          await storage.recordTransaction({
+            userId,
+            type: "purchase",
+            amount: credits,
+            currency: "credits",
+            description: `Purchased ${credits} credits`,
+            metadata: { paymentIntentId: paymentIntent.id },
+          });
+
+          console.log(`💳 User ${userId} purchased ${credits} credits`);
+        }
+      }
+
+      res.json({ received: true });
+    } catch (error) {
+      console.error('Webhook error:', error);
+      res.status(400).json({ message: 'Webhook error' });
+    }
+  });
+
   // Upload SFX files to object storage
   app.post('/api/upload-sfx-files', async (req, res) => {
     try {

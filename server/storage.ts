@@ -6,6 +6,10 @@ import {
   referrals,
   processedWebhookEvents,
   userClones,
+  userWallets,
+  transactions,
+  miningEvents,
+  adImpressions,
   type User,
   type UpsertUser,
   type Battle,
@@ -24,7 +28,16 @@ import {
   type InsertWebhookEvent,
   type UserClone,
   type InsertUserClone,
+  type UserWallet,
+  type InsertUserWallet,
+  type Transaction,
+  type InsertTransaction,
+  type MiningEvent,
+  type InsertMiningEvent,
+  type AdImpression,
+  type InsertAdImpression,
   SUBSCRIPTION_TIERS,
+  MONETIZATION_CONFIG,
 } from "@shared/schema";
 import { db, withRetry } from "./db";
 import { eq, and, gte, lt, sql, desc, count, max } from "drizzle-orm";
@@ -102,6 +115,33 @@ export interface IStorage {
   getUserClone(userId: string): Promise<UserClone | undefined>;
   createOrUpdateUserClone(userId: string, battlesLimit?: number): Promise<UserClone>;
   getCloneById(cloneId: string): Promise<UserClone | undefined>;
+
+  // Monetization operations - Wallet
+  getUserWallet(userId: string): Promise<UserWallet | undefined>;
+  createUserWallet(userId: string): Promise<UserWallet>;
+  getOrCreateUserWallet(userId: string): Promise<UserWallet>;
+  updateWalletBalance(userId: string, updates: {
+    battleCredits?: number;
+    tokens?: string;
+    cloneAdRevenue?: string;
+  }): Promise<UserWallet>;
+  
+  // Monetization operations - Transactions
+  recordTransaction(transaction: InsertTransaction): Promise<Transaction>;
+  getUserTransactions(userId: string, limit?: number): Promise<Transaction[]>;
+  
+  // Monetization operations - Mining
+  recordMiningEvent(event: InsertMiningEvent): Promise<MiningEvent>;
+  getUserMiningEvents(userId: string, limit?: number): Promise<MiningEvent[]>;
+  awardMiningTokens(userId: string, activityType: string, battleId?: string): Promise<{ tokens: string; transaction: Transaction }>;
+  
+  // Monetization operations - Ad Revenue
+  recordAdImpression(impression: InsertAdImpression): Promise<AdImpression>;
+  getCloneAdRevenue(cloneOwnerId: string): Promise<{ totalRevenue: string; impressions: number }>;
+  
+  // Battle monetization
+  deductBattleCredits(userId: string, amount: number): Promise<boolean>;
+  awardBattleRewards(userId: string, battleId: string, didWin: boolean): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -869,6 +909,326 @@ export class DatabaseStorage implements IStorage {
       console.error('Error fetching clone by ID:', error);
       throw error;
     }
+  }
+
+  // ====================
+  // MONETIZATION OPERATIONS
+  // ====================
+
+  // Wallet operations
+  async getUserWallet(userId: string): Promise<UserWallet | undefined> {
+    try {
+      const [wallet] = await db
+        .select()
+        .from(userWallets)
+        .where(eq(userWallets.userId, userId))
+        .limit(1);
+      
+      return wallet;
+    } catch (error) {
+      console.error('Error fetching user wallet:', error);
+      throw error;
+    }
+  }
+
+  async createUserWallet(userId: string): Promise<UserWallet> {
+    return withRetry(
+      async () => {
+        const [wallet] = await db
+          .insert(userWallets)
+          .values({ userId })
+          .returning();
+        
+        return wallet;
+      },
+      { maxAttempts: 3 },
+      `createUserWallet for ${userId}`
+    );
+  }
+
+  async getOrCreateUserWallet(userId: string): Promise<UserWallet> {
+    const existing = await this.getUserWallet(userId);
+    if (existing) return existing;
+    return this.createUserWallet(userId);
+  }
+
+  async updateWalletBalance(userId: string, updates: {
+    battleCredits?: number;
+    tokens?: string;
+    cloneAdRevenue?: string;
+  }): Promise<UserWallet> {
+    return withRetry(
+      async () => {
+        const wallet = await this.getOrCreateUserWallet(userId);
+        
+        const [updated] = await db
+          .update(userWallets)
+          .set({
+            ...updates,
+            updatedAt: new Date(),
+          })
+          .where(eq(userWallets.userId, userId))
+          .returning();
+        
+        return updated;
+      },
+      { maxAttempts: 3 },
+      `updateWalletBalance for ${userId}`
+    );
+  }
+
+  // Transaction operations
+  async recordTransaction(transaction: InsertTransaction): Promise<Transaction> {
+    return withRetry(
+      async () => {
+        const [record] = await db
+          .insert(transactions)
+          .values(transaction)
+          .returning();
+        
+        return record;
+      },
+      { maxAttempts: 3 },
+      `recordTransaction for ${transaction.userId}`
+    );
+  }
+
+  async getUserTransactions(userId: string, limit: number = 50): Promise<Transaction[]> {
+    try {
+      const records = await db
+        .select()
+        .from(transactions)
+        .where(eq(transactions.userId, userId))
+        .orderBy(desc(transactions.createdAt))
+        .limit(limit);
+      
+      return records;
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      throw error;
+    }
+  }
+
+  // Mining operations
+  async recordMiningEvent(event: InsertMiningEvent): Promise<MiningEvent> {
+    return withRetry(
+      async () => {
+        const [record] = await db
+          .insert(miningEvents)
+          .values(event)
+          .returning();
+        
+        return record;
+      },
+      { maxAttempts: 3 },
+      `recordMiningEvent for ${event.userId}`
+    );
+  }
+
+  async getUserMiningEvents(userId: string, limit: number = 50): Promise<MiningEvent[]> {
+    try {
+      const events = await db
+        .select()
+        .from(miningEvents)
+        .where(eq(miningEvents.userId, userId))
+        .orderBy(desc(miningEvents.createdAt))
+        .limit(limit);
+      
+      return events;
+    } catch (error) {
+      console.error('Error fetching mining events:', error);
+      throw error;
+    }
+  }
+
+  async awardMiningTokens(userId: string, activityType: string, battleId?: string): Promise<{ tokens: string; transaction: Transaction }> {
+    return withRetry(
+      async () => {
+        // Determine token amount based on activity type
+        let tokensEarned = "0.00000000";
+        switch (activityType) {
+          case "battle_complete":
+            tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.BATTLE_COMPLETE;
+            break;
+          case "battle_win":
+            tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.BATTLE_WIN;
+            break;
+          case "daily_login":
+            tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.DAILY_LOGIN;
+            break;
+          case "clone_battled":
+            tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.CLONE_BATTLED;
+            break;
+          case "referral":
+            tokensEarned = MONETIZATION_CONFIG.MINING_REWARDS.REFERRAL;
+            break;
+        }
+
+        // Record mining event
+        await this.recordMiningEvent({
+          userId,
+          tokensEarned,
+          activityType,
+          battleId,
+        });
+
+        // Update wallet
+        const wallet = await this.getOrCreateUserWallet(userId);
+        const newTokenBalance = (parseFloat(wallet.tokens) + parseFloat(tokensEarned)).toFixed(8);
+        const newLifetimeEarned = (parseFloat(wallet.lifetimeEarned) + parseFloat(tokensEarned)).toFixed(8);
+
+        await this.updateWalletBalance(userId, {
+          tokens: newTokenBalance,
+        });
+
+        await db
+          .update(userWallets)
+          .set({ lifetimeEarned: newLifetimeEarned })
+          .where(eq(userWallets.userId, userId));
+
+        // Record transaction
+        const transaction = await this.recordTransaction({
+          userId,
+          type: "mining",
+          amount: tokensEarned,
+          currency: "tokens",
+          description: `Mined tokens: ${activityType}`,
+          battleId,
+        });
+
+        console.log(`💰 User ${userId} mined ${tokensEarned} tokens (${activityType})`);
+
+        return { tokens: tokensEarned, transaction };
+      },
+      { maxAttempts: 3 },
+      `awardMiningTokens for ${userId}`
+    );
+  }
+
+  // Ad revenue operations
+  async recordAdImpression(impression: InsertAdImpression): Promise<AdImpression> {
+    return withRetry(
+      async () => {
+        const [record] = await db
+          .insert(adImpressions)
+          .values([impression])
+          .returning();
+        
+        // Update clone owner's wallet
+        const cloneOwnerId = impression.cloneOwnerId || "";
+        const wallet = await this.getOrCreateUserWallet(cloneOwnerId);
+        const revenueShare = impression.revenueShare || "0.00";
+        const newAdRevenue = (parseFloat(wallet.cloneAdRevenue) + parseFloat(revenueShare)).toFixed(2);
+        const newImpressions = wallet.totalAdImpressions + 1;
+
+        await db
+          .update(userWallets)
+          .set({
+            cloneAdRevenue: newAdRevenue,
+            totalAdImpressions: newImpressions,
+            updatedAt: new Date(),
+          })
+          .where(eq(userWallets.userId, cloneOwnerId));
+
+        // Record revenue transaction
+        await this.recordTransaction({
+          userId: cloneOwnerId,
+          type: "ad_revenue",
+          amount: revenueShare,
+          currency: "usd",
+          description: "Ad revenue from clone battle",
+          battleId: impression.battleId,
+          relatedUserId: impression.viewerId,
+        });
+
+        console.log(`📺 Ad revenue: ${cloneOwnerId} earned $${revenueShare} from ad`);
+
+        return record;
+      },
+      { maxAttempts: 3 },
+      `recordAdImpression for battle ${impression.battleId || "unknown"}`
+    );
+  }
+
+  async getCloneAdRevenue(cloneOwnerId: string): Promise<{ totalRevenue: string; impressions: number }> {
+    try {
+      const wallet = await this.getOrCreateUserWallet(cloneOwnerId);
+      
+      return {
+        totalRevenue: wallet.cloneAdRevenue,
+        impressions: wallet.totalAdImpressions,
+      };
+    } catch (error) {
+      console.error('Error fetching clone ad revenue:', error);
+      throw error;
+    }
+  }
+
+  // Battle monetization
+  async deductBattleCredits(userId: string, amount: number): Promise<boolean> {
+    return withRetry(
+      async () => {
+        const wallet = await this.getOrCreateUserWallet(userId);
+        
+        if (wallet.battleCredits < amount) {
+          console.log(`❌ User ${userId} has insufficient credits: ${wallet.battleCredits} < ${amount}`);
+          return false;
+        }
+
+        const newBalance = wallet.battleCredits - amount;
+        await this.updateWalletBalance(userId, { battleCredits: newBalance });
+
+        // Record transaction
+        await this.recordTransaction({
+          userId,
+          type: "battle_cost",
+          amount: amount.toString(),
+          currency: "credits",
+          description: `Spent credits to start battle`,
+        });
+
+        console.log(`💳 User ${userId} spent ${amount} credits, new balance: ${newBalance}`);
+
+        return true;
+      },
+      { maxAttempts: 3 },
+      `deductBattleCredits for ${userId}`
+    );
+  }
+
+  async awardBattleRewards(userId: string, battleId: string, didWin: boolean): Promise<void> {
+    return withRetry(
+      async () => {
+        const wallet = await this.getOrCreateUserWallet(userId);
+
+        // Award completion tokens
+        await this.awardMiningTokens(userId, "battle_complete", battleId);
+
+        if (didWin) {
+          // Award win bonus tokens
+          await this.awardMiningTokens(userId, "battle_win", battleId);
+
+          // Award credits for winning
+          const creditsEarned = MONETIZATION_CONFIG.CREDIT_REWARDS.BATTLE_WIN;
+          const newBalance = wallet.battleCredits + creditsEarned;
+          
+          await this.updateWalletBalance(userId, { battleCredits: newBalance });
+
+          await this.recordTransaction({
+            userId,
+            type: "battle_win",
+            amount: creditsEarned.toString(),
+            currency: "credits",
+            description: `Won battle reward`,
+            battleId,
+          });
+
+          console.log(`🏆 User ${userId} won battle! Earned ${creditsEarned} credits`);
+        }
+      },
+      { maxAttempts: 3 },
+      `awardBattleRewards for ${userId}`
+    );
   }
 }
 

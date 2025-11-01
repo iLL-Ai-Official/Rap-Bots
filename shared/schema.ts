@@ -378,6 +378,7 @@ export const userWallets = pgTable("user_wallets", {
   lifetimeSpent: decimal("lifetime_spent", { precision: 18, scale: 8 }).notNull().default("0.00000000"), // Total spent
   cloneAdRevenue: decimal("clone_ad_revenue", { precision: 10, scale: 2 }).notNull().default("0.00"), // Revenue from clone battles
   totalAdImpressions: integer("total_ad_impressions").notNull().default(0),
+  lastDailyBonusAt: timestamp("last_daily_bonus_at"), // Last time daily bonus was claimed
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [

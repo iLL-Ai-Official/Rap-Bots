@@ -16,12 +16,26 @@ The application is built with a clear separation between frontend and backend se
 
 ## Recent Changes
 
-### November 1, 2025 - Replit Environment Migration Complete
-- **Database Setup**: Successfully provisioned PostgreSQL database with all 9 tables (battles, battle_rounds, users, tournaments, tournament_battles, sessions, referrals, processed_webhook_events, user_clones)
-- **Router Configuration**: All 14 pages added to React Router (Landing, Home, Subscribe, BattleArena, Tournaments, TournamentDetail, TournamentLeaderboard, TournamentHistory, TournamentBrackets, FineTuning, Settings, CloneManager, Admin, NotFound)
+### November 1, 2025 - Monetization System Launch
+- **Database Schema**: Added 4 new tables (user_wallets, transactions, mining_events, ad_impressions) for comprehensive monetization tracking
+- **Mining System**: Users earn tokens through battles, wins, daily logins, and when others battle their clones
+  - Battle completion: 0.1 tokens
+  - Battle win: 0.25 tokens bonus
+  - Daily login: 0.05 tokens
+  - Clone battled: 0.15 tokens to clone owner
+  - Referral: 1.0 tokens
+- **Battle Credit System**: Users spend 1 credit per battle, earn 2 credits for wins, 5 credits daily login bonus
+- **Ad Revenue Sharing**: 70% of ad revenue goes to clone owners when their clones are battled ($0.005 per impression base)
+- **Wallet Dashboard**: New /wallet page showing credits, tokens, lifetime earnings, transactions, and mining history
+- **Credit Purchases**: Stripe integration for purchasing credit packages (100 for $0.99 up to 5000 for $24.99 with bonuses)
+- **API Endpoints**: 8 new monetization endpoints (wallet, transactions, mining, daily bonus, ad revenue, credit purchase, webhooks)
+- **Clone Generation Enhancement**: Users can choose to analyze 10, 25, 50, or all battles when generating/updating AI clones
+- **App Status**: Fully functional on port 5000 with 15 pages (added Wallet) and all monetization features operational
+
+### Replit Environment Migration Complete (Earlier November 1, 2025)
+- **Database Setup**: Successfully provisioned PostgreSQL database with 13 tables total
+- **Router Configuration**: All 15 pages added to React Router including new Wallet page
 - **Development Mode**: Made Stripe and AI API keys optional for development - app runs without blocking on missing keys
-- **Clone Generation Enhancement**: Added configurable battle analysis - users can now choose to analyze 10, 25, 50, or all battles when generating/updating their AI clone for improved accuracy
-- **App Status**: Fully functional on port 5000 with database configured and all services initialized
 
 ### Previous Changes (September 5, 2025)
 #### Stripe Webhook Improvements

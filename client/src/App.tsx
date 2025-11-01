@@ -20,6 +20,7 @@ import TournamentBrackets from "@/pages/tournament-brackets";
 import FineTuning from "@/pages/fine-tuning";
 import Settings from "@/pages/settings";
 import CloneManager from "@/pages/clone-manager";
+import Wallet from "@/pages/wallet";
 import NotFound from "@/pages/not-found";
 import AdminPage from "@/pages/admin";
 
@@ -58,6 +59,7 @@ function Router() {
           <Route path="/fine-tuning" component={FineTuning} />
           <Route path="/settings" component={Settings} />
           <Route path="/clone" component={CloneManager} />
+          <Route path="/wallet" component={Wallet} />
           <Route path="/admin" component={AdminPage} />
           <Route component={NotFound} />
         </>

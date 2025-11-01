@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { apiRequest } from '@/lib/queryClient';
 import type { Tournament } from '@shared/schema';
 const tournamentImage = "/images/Tournament_championship_bracket_0fd32970.png";
@@ -31,6 +32,7 @@ interface CreateTournamentForm {
 export default function Tournaments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [formData, setFormData] = useState<CreateTournamentForm>({
@@ -47,11 +49,13 @@ export default function Tournaments() {
   // Fetch user's tournaments
   const { data: tournaments, isLoading } = useQuery<Tournament[]>({
     queryKey: ['/api/tournaments'],
+    enabled: !!user,
   });
 
   // Fetch active tournaments (leaderboard)
   const { data: activeTournaments } = useQuery<Tournament[]>({
     queryKey: ['/api/tournaments/active'],
+    enabled: !!user,
   });
 
   // Create tournament mutation

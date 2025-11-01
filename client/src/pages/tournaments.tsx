@@ -27,6 +27,9 @@ interface CreateTournamentForm {
   lyricComplexity: number;
   styleIntensity: number;
   prize: string;
+  entryFeeUSDC?: string;
+  organizerPercentage: number;
+  maxParticipants: number;
 }
 
 export default function Tournaments() {
@@ -43,7 +46,10 @@ export default function Tournaments() {
     profanityFilter: false,
     lyricComplexity: 50,
     styleIntensity: 50,
-    prize: 'Tournament Champion Title'
+    prize: 'Tournament Champion Title',
+    entryFeeUSDC: '0',
+    organizerPercentage: 10,
+    maxParticipants: 8
   });
 
   // Fetch user's tournaments
@@ -247,6 +253,89 @@ export default function Tournaments() {
                     data-testid="input-prize"
                   />
                 </div>
+
+                {/* Entry Fee Section */}
+                <div className="border-t border-gray-700 pt-4 mt-2">
+                  <h3 className="text-white font-semibold mb-3 flex items-center">
+                    💰 Entry Fee & Prize Pool (USDC on Arc)
+                  </h3>
+                  
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="entryFee" className="text-white">Entry Fee (USDC)</Label>
+                      <span className="text-sm text-green-400 font-medium">{formData.entryFeeUSDC === '0' ? 'Free' : `$${formData.entryFeeUSDC}`}</span>
+                    </div>
+                    <Input
+                      id="entryFee"
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={formData.entryFeeUSDC}
+                      onChange={(e) => setFormData(prev => ({ ...prev, entryFeeUSDC: e.target.value }))}
+                      placeholder="0.00"
+                      className="bg-gray-800 border-gray-700 text-white"
+                      data-testid="input-entry-fee"
+                    />
+                    <p className="text-xs text-gray-500">Set to 0 for free tournaments. Max $100 USDC.</p>
+                  </div>
+
+                  <div className="grid gap-2 mt-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-white">Organizer Fee</Label>
+                      <span className="text-sm text-purple-400 font-medium">{formData.organizerPercentage}%</span>
+                    </div>
+                    <Slider
+                      value={[formData.organizerPercentage]}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, organizerPercentage: value[0] }))}
+                      min={0}
+                      max={50}
+                      step={5}
+                      className="w-full"
+                      data-testid="slider-organizer-percentage"
+                    />
+                    <p className="text-xs text-gray-500">Your cut of the prize pool (0-50%). Remaining goes to winners.</p>
+                  </div>
+
+                  <div className="grid gap-2 mt-3">
+                    <Label htmlFor="maxParticipants" className="text-white">Max Participants</Label>
+                    <Select 
+                      value={formData.maxParticipants.toString()} 
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, maxParticipants: parseInt(value) }))}
+                    >
+                      <SelectTrigger className="bg-gray-800 border-gray-700 text-white" data-testid="select-max-participants">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-800 border-gray-700">
+                        <SelectItem value="2">2 Players</SelectItem>
+                        <SelectItem value="4">4 Players</SelectItem>
+                        <SelectItem value="8">8 Players</SelectItem>
+                        <SelectItem value="16">16 Players</SelectItem>
+                        <SelectItem value="32">32 Players</SelectItem>
+                        <SelectItem value="64">64 Players</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {parseFloat(formData.entryFeeUSDC || '0') > 0 && (
+                    <div className="mt-4 p-3 bg-purple-900/20 border border-purple-700/30 rounded-lg">
+                      <div className="text-xs text-gray-400 space-y-1">
+                        <div className="flex justify-between">
+                          <span>Prize Pool:</span>
+                          <span className="text-green-400">${(parseFloat(formData.entryFeeUSDC || '0') * formData.maxParticipants).toFixed(2)} USDC</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Your Cut ({formData.organizerPercentage}%):</span>
+                          <span className="text-purple-400">${(parseFloat(formData.entryFeeUSDC || '0') * formData.maxParticipants * formData.organizerPercentage / 100).toFixed(2)} USDC</span>
+                        </div>
+                        <div className="flex justify-between font-semibold">
+                          <span>Winners' Pool:</span>
+                          <span className="text-yellow-400">${(parseFloat(formData.entryFeeUSDC || '0') * formData.maxParticipants * (100 - formData.organizerPercentage) / 100).toFixed(2)} USDC</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               
               <DialogFooter>
@@ -366,9 +455,16 @@ export default function Tournaments() {
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-white text-lg">{tournament.name}</CardTitle>
-                        <Badge className={`${getStatusColor(tournament.status)} text-white`}>
-                          {getTournamentStatus(tournament)}
-                        </Badge>
+                        <div className="flex gap-2">
+                          {(!tournament.entryFeeUSDC || tournament.entryFeeUSDC === '0') && (
+                            <Badge className="bg-green-500 text-white" data-testid={`badge-free-${tournament.id}`}>
+                              Free
+                            </Badge>
+                          )}
+                          <Badge className={`${getStatusColor(tournament.status)} text-white`}>
+                            {getTournamentStatus(tournament)}
+                          </Badge>
+                        </div>
                       </div>
                       <CardDescription className="text-gray-400">
                         {tournament.type === 'single_elimination' ? 'Single Elimination' : 'Double Elimination'}
@@ -376,6 +472,28 @@ export default function Tournaments() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-2 text-sm text-gray-300">
+                        {tournament.entryFeeUSDC && parseFloat(tournament.entryFeeUSDC) > 0 && (
+                          <>
+                            <div className="border-b border-gray-700 pb-2 mb-2">
+                              <div className="flex items-center justify-between text-green-400 font-semibold">
+                                <span>Entry Fee:</span>
+                                <span>${tournament.entryFeeUSDC} USDC</span>
+                              </div>
+                              <div className="flex items-center justify-between mt-1">
+                                <span className="text-xs">Prize Pool:</span>
+                                <span className="text-xs text-yellow-400">${tournament.prizePoolUSDC} USDC</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs">Organizer Cut:</span>
+                                <span className="text-xs text-purple-400">{tournament.organizerPercentage}%</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs">Participants:</span>
+                                <span className="text-xs">{tournament.currentParticipants}/{tournament.maxParticipants}</span>
+                              </div>
+                            </div>
+                          </>
+                        )}
                         <div className="flex items-center justify-between">
                           <span>Difficulty:</span>
                           <span className="capitalize">{tournament.difficulty}</span>

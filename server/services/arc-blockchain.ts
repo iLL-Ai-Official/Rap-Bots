@@ -178,6 +178,110 @@ export class ArcBlockchainService {
     console.log(`⛓️ ${logPrefix} Transaction ${txHash.substring(0, 20)}... is confirmed on Arc L1`);
     return 'confirmed';
   }
+
+  /**
+   * Process tournament entry fee payment
+   * Player pays entry fee → goes to tournament prize pool escrow
+   * THIS METHOD NOW MAKES REAL BLOCKCHAIN TRANSFERS!
+   */
+  async processTournamentEntryFee(
+    playerAddress: string,
+    tournamentId: string,
+    entryFeeUSDC: string,
+    platformEscrowAddress: string
+  ): Promise<ArcTransferResult> {
+    const memo = `Tournament Entry Fee - ${tournamentId}`;
+    
+    if (this.config.demoMode) {
+      console.log(`⛓️ [DEMO] Processing tournament entry fee: ${entryFeeUSDC} USDC from ${playerAddress}`);
+    } else {
+      console.log(`⛓️ [PRODUCTION] Processing tournament entry fee: ${entryFeeUSDC} USDC from ${playerAddress}`);
+    }
+
+    // Execute REAL USDC transfer from player wallet to platform escrow
+    const result = await this.transferUSDC({
+      fromAddress: playerAddress,
+      toAddress: platformEscrowAddress,
+      amountUSDC: entryFeeUSDC,
+      memo,
+    });
+
+    if (this.config.demoMode) {
+      console.log(`⛓️ [DEMO] Entry fee tx confirmed: ${result.txHash} (block ${result.blockNumber})`);
+    } else {
+      console.log(`⛓️ [PRODUCTION] Entry fee tx confirmed: ${result.txHash} (block ${result.blockNumber})`);
+    }
+
+    return result;
+  }
+
+  /**
+   * Distribute tournament prizes to winners
+   * Splits prize pool according to tournament rules with REAL USDC transfers
+   */
+  async distributeTournamentPrizes(
+    tournamentId: string,
+    prizePoolUSDC: string,
+    organizerPercentage: number,
+    organizerAddress: string,
+    winners: { address: string; percentage: number; place: string }[]
+  ): Promise<ArcTransferResult[]> {
+    const results: ArcTransferResult[] = [];
+    const totalPool = parseFloat(prizePoolUSDC);
+    const platformWallet = process.env.ARC_PLATFORM_WALLET || "0x0000000000000000000000000000000000000000";
+    
+    // Calculate organizer cut
+    const organizerCut = totalPool * (organizerPercentage / 100);
+    const remainingPool = totalPool - organizerCut;
+
+    if (this.config.demoMode) {
+      console.log(`⛓️ [DEMO] Distributing ${prizePoolUSDC} USDC prize pool for tournament ${tournamentId}`);
+      console.log(`⛓️ [DEMO] Organizer (${organizerPercentage}%): ${organizerCut.toFixed(2)} USDC`);
+      console.log(`⛓️ [DEMO] Winners' pool: ${remainingPool.toFixed(2)} USDC`);
+    } else {
+      console.log(`⛓️ [PRODUCTION] Distributing ${prizePoolUSDC} USDC prize pool for tournament ${tournamentId}`);
+      console.log(`⛓️ [PRODUCTION] Organizer (${organizerPercentage}%): ${organizerCut.toFixed(2)} USDC`);
+      console.log(`⛓️ [PRODUCTION] Winners' pool: ${remainingPool.toFixed(2)} USDC`);
+    }
+
+    // Pay organizer with REAL blockchain transfer
+    if (organizerCut > 0) {
+      const organizerTx = await this.transferUSDC({
+        fromAddress: platformWallet,
+        toAddress: organizerAddress,
+        amountUSDC: organizerCut.toFixed(6),
+        memo: `Tournament Organizer Fee - ${tournamentId}`,
+      });
+      results.push(organizerTx);
+      
+      if (this.config.demoMode) {
+        console.log(`⛓️ [DEMO] Paid organizer ${organizerCut.toFixed(2)} USDC (tx: ${organizerTx.txHash})`);
+      } else {
+        console.log(`⛓️ [PRODUCTION] Paid organizer ${organizerCut.toFixed(2)} USDC (tx: ${organizerTx.txHash})`);
+      }
+    }
+
+    // Pay winners with REAL blockchain transfers
+    for (const winner of winners) {
+      const winnerPrize = remainingPool * (winner.percentage / 100);
+      
+      const winnerTx = await this.transferUSDC({
+        fromAddress: platformWallet,
+        toAddress: winner.address,
+        amountUSDC: winnerPrize.toFixed(6),
+        memo: `Tournament Prize - ${winner.place} - ${tournamentId}`,
+      });
+      results.push(winnerTx);
+      
+      if (this.config.demoMode) {
+        console.log(`⛓️ [DEMO] Paid ${winner.place}: ${winnerPrize.toFixed(2)} USDC to ${winner.address.substring(0,10)}... (tx: ${winnerTx.txHash})`);
+      } else {
+        console.log(`⛓️ [PRODUCTION] Paid ${winner.place}: ${winnerPrize.toFixed(2)} USDC to ${winner.address.substring(0,10)}... (tx: ${winnerTx.txHash})`);
+      }
+    }
+
+    return results;
+  }
 }
 
 // Factory function

@@ -269,7 +269,7 @@ export class ScoringService {
 
   // ENHANCED DETECTION METHODS
   
-  private detectAdvancedWordplay(text: string): number {
+  private detectAdvancedWordplay(text: string, rhymeAnalysis?: any, isFinalScore?: boolean): number {
     let score = 0;
     const lower = text.toLowerCase();
     const words = lower.split(/\s+/);
@@ -375,7 +375,7 @@ export class ScoringService {
     return Math.min(50, score); // Increased max to accommodate new techniques
   }
   
-  private detectHomonyms(text: string): number {
+  private detectHomonyms(text: string, rhymeAnalysis?: any, isFinalScore?: boolean): number {
     let score = 0;
     const words = text.toLowerCase().split(/\s+/);
     

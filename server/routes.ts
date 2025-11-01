@@ -17,7 +17,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { db } from "./db.js";
-import { users, battles, tournaments } from "@shared/schema";
+import { users, battles, tournaments, battleRoundSubmissions } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 
 // Configure multer for audio uploads
@@ -1794,8 +1794,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userVerseResponse = await groqService.generateCloneVerse(userClone, roundNumber, []);
       const opponentVerseResponse = await groqService.generateCloneVerse(opponentClone, roundNumber, [userVerseResponse]);
 
-      const userScores = await scoringService.scoreVerse(userVerseResponse);
-      const opponentScores = await scoringService.scoreVerse(opponentVerseResponse);
+      // Score both verses together
+      const roundScores = scoringService.scoreRound(userVerseResponse, opponentVerseResponse, false, battleId);
+      const userScores = {
+        totalScore: roundScores.userScore,
+        rhymeDensity: roundScores.rhymeDensity,
+        flowQuality: roundScores.flowQuality,
+        creativity: roundScores.creativity,
+      };
+      const opponentScores = {
+        totalScore: roundScores.aiScore,
+        rhymeDensity: roundScores.rhymeDensity,
+        flowQuality: roundScores.flowQuality,
+        creativity: roundScores.creativity,
+      };
 
       const roundData = {
         id: `round_${Date.now()}`,
@@ -2668,9 +2680,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const role = battle.challengerUserId === userId ? 'challenger' : 'opponent';
 
       // Score the verse using existing scoring service
-      const analysis = await scoringService.scoreVerse(verse, battle.difficulty as any, {
-        profanityFilter: battle.profanityFilter || false,
-      });
+      const roundScores = scoringService.scoreRound(verse, '', false, battleId);
+      const analysis = {
+        totalScore: roundScores.userScore,
+        rhymeDensity: roundScores.rhymeDensity,
+        flowQuality: roundScores.flowQuality,
+        creativity: roundScores.creativity,
+      };
 
       // Create submission
       const submission = await storage.createRoundSubmission({

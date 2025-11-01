@@ -16,7 +16,18 @@ The application is built with a clear separation between frontend and backend se
 
 ## Recent Changes
 
-### November 1, 2025 (Latest) - Production Ready: ElevenLabs SFX & Arc Blockchain
+### November 1, 2025 (Latest) - RapBots Coin Flip Game Added
+- **Coin Flip Gambling Game**: Added fun coin flip mini-game with custom RapBots coin design
+  - New page: /coinflip with animated 3D coin flip
+  - Custom coin faces: Rapper with microphone (heads) vs Robot rapper (tails)
+  - Credit betting system: Bet 1-50 credits for 2x payout
+  - 1 new API endpoint: POST /api/coinflip with fair 50/50 odds
+  - Integrated with wallet system for seamless credit management
+  - Smooth flip animations with CSS 3D transforms
+- **User Interface**: Added Coin Flip quick action card on home page
+- **App Status**: 18 pages total, fully functional coin flip game ready
+
+### November 1, 2025 - Production Ready: ElevenLabs SFX & Arc Blockchain
 - **Real Battle Sound Effects**: Integrated ElevenLabs Sound Effects API for authentic crowd reactions and battle sounds
   - New service: elevenlabs-sfx.ts with intelligent caching system
   - 9 AI-generated sound types: boxing bell, crowd reactions (mild/medium/wild/boo/gasp), air horn, victory fanfare

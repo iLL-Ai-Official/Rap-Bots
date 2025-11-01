@@ -1685,6 +1685,62 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Coin Flip endpoint - double or nothing!
+  app.post('/api/coinflip', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { choice, betAmount } = req.body;
+
+      // Validate input
+      if (!choice || !['heads', 'tails'].includes(choice)) {
+        return res.status(400).json({ message: 'Invalid choice. Must be "heads" or "tails"' });
+      }
+
+      if (!betAmount || betAmount < 1 || betAmount > 100) {
+        return res.status(400).json({ message: 'Invalid bet amount. Must be between 1 and 100 credits' });
+      }
+
+      // Get user wallet
+      const wallet = await storage.getUserWallet(userId);
+      if (!wallet || wallet.battleCredits < betAmount) {
+        return res.status(400).json({ message: 'Insufficient credits' });
+      }
+
+      // Flip the coin (50/50 chance)
+      const result = Math.random() < 0.5 ? 'heads' : 'tails';
+      const won = result === choice;
+      const creditChange = won ? betAmount : -betAmount;
+
+      // Update wallet
+      const updatedWallet = await storage.updateWalletBalance(userId, {
+        battleCredits: creditChange
+      });
+
+      // Record transaction
+      await storage.recordTransaction({
+        userId,
+        type: 'coinflip',
+        amount: creditChange.toString(),
+        description: won 
+          ? `Won ${betAmount} credits (${choice} - ${result})`
+          : `Lost ${betAmount} credits (${choice} - ${result})`,
+        relatedBattleId: null,
+      });
+
+      console.log(`🪙 Coin flip: ${result} | User chose: ${choice} | ${won ? 'WON' : 'LOST'} ${Math.abs(creditChange)} credits`);
+
+      res.json({
+        result,
+        won,
+        creditsWon: won ? betAmount : 0,
+        newBalance: updatedWallet.battleCredits,
+      });
+    } catch (error) {
+      console.error('Coin flip error:', error);
+      res.status(500).json({ message: 'Failed to flip coin' });
+    }
+  });
+
   // User Clone endpoints
   app.get('/api/user/clone', isAuthenticated, async (req: any, res) => {
     try {

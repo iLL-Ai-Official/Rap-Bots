@@ -23,6 +23,7 @@ import Settings from "@/pages/settings";
 import CloneManager from "@/pages/clone-manager";
 import Wallet from "@/pages/wallet";
 import Profile from "@/pages/profile";
+import CoinFlip from "@/pages/coin-flip";
 import NotFound from "@/pages/not-found";
 import AdminPage from "@/pages/admin";
 
@@ -63,6 +64,7 @@ function Router() {
           <Route path="/settings" component={Settings} />
           <Route path="/clone" component={CloneManager} />
           <Route path="/wallet" component={Wallet} />
+          <Route path="/coinflip" component={CoinFlip} />
           <Route path="/profile/:userId" component={Profile} />
           <Route path="/profile" component={Profile} />
           <Route path="/admin" component={AdminPage} />

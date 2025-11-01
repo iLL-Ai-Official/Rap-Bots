@@ -1,0 +1,203 @@
+RAPBOTS Core Principles and Capabilities
+
+Core Principles
+
+Arc is more than a new blockchain. It represents a new approach to global economic coordination and infrastructure, built on the foundational principles of transparency and trust that define Circle:
+
+Purpose-built, not general-purpose
+
+Open and composable by default
+
+Market-neutral and multichain-aligned
+
+Built to coordinate, not control
+
+Trusted infrastructure, end-to-end
+
+What You Can Build with RAPBOTS
+
+Onchain Credit with Offchain Trust
+
+Design credit infrastructure that combines stablecoins with external trust signals:
+
+Identity-based lending protocols using verifiable credentials
+
+Reputation-driven credit systems tied to cash flow or payment history
+
+SMB and consumer credit apps serving under-served markets
+
+Capital markets settlement and tokenized collateral
+
+Modernize Capital Markets with Stablecoin-Native Settlement
+
+Tokenized securities platforms with instant Delivery versus Payment (DvP)
+
+Collateral management systems for stablecoin-backed margin
+
+Tokenized funds and structured products issued onchain
+
+Prediction markets trading real-time data, forecasts, and risk signals
+
+Create Markets and Services Around Stablecoin Conversion and FX
+
+Perpetuals and derivatives exchanges on stablecoin pairs
+
+Swap APIs for programmatic stablecoin-to-stablecoin conversion
+
+Treasury tools for multi-currency rebalancing and cross-border payouts
+
+Agentic Commerce
+
+Enable autonomous systems to transact natively onchain:
+
+AI-mediated marketplaces where agents buy, sell, and execute transactions
+
+Machine-to-machine payment networks for IoT and devices
+
+Coordination systems for agents to post, match, and settle intents in real time
+
+Cross-Border Payments and Payouts
+
+Power global money movement with fiat-backed stablecoins, instant settlement, and low fees:
+
+Remittance platforms for consumer transfers
+
+Payout systems for marketplaces, gig workers, and global payroll
+
+Trade finance platforms with tokenized invoices and automated onchain settlement
+
+RAPBOTS Core Principles and Capabilities
+
+Core Principles
+
+Arc is more than a new blockchain. It represents a new approach to global economic coordination and infrastructure, built on the foundational principles of transparency and trust that define Circle:
+
+Purpose-built, not general-purpose
+
+Open and composable by default
+
+Market-neutral and multichain-aligned
+
+Built to coordinate, not control
+
+Trusted infrastructure, end-to-end
+
+What You Can Build with RAPBOTS
+
+Onchain Credit with Offchain Trust
+
+Design credit infrastructure that combines stablecoins with external trust signals:
+
+Identity-based lending protocols using verifiable credentials
+
+Reputation-driven credit systems tied to cash flow or payment history
+
+SMB and consumer credit apps serving under-served markets
+
+Capital markets settlement and tokenized collateral
+
+Modernize Capital Markets with Stablecoin-Native Settlement
+
+Tokenized securities platforms with instant Delivery versus Payment (DvP)
+
+Collateral management systems for stablecoin-backed margin
+
+Tokenized funds and structured products issued onchain
+
+Prediction markets trading real-time data, forecasts, and risk signals
+
+Create Markets and Services Around Stablecoin Conversion and FX
+
+Perpetuals and derivatives exchanges on stablecoin pairs
+
+Swap APIs for programmatic stablecoin-to-stablecoin conversion
+
+Treasury tools for multi-currency rebalancing and cross-border payouts
+
+Agentic Commerce
+
+Enable autonomous systems to transact natively onchain:
+
+AI-mediated marketplaces where agents buy, sell, and execute transactions
+
+Machine-to-machine payment networks for IoT and devices
+
+Coordination systems for agents to post, match, and settle intents in real time
+
+Cross-Border Payments and Payouts
+
+Power global money movement with fiat-backed stablecoins, instant settlement, and low fees:
+
+Remittance platforms for consumer transfers
+
+Payout systems for marketplaces, gig workers, and global payroll
+
+Trade finance platforms with tokenized invoices and automated onchain settlement
+
+RAPBOTS Core Principles and Capabilities
+
+Core Principles
+
+Arc is more than a new blockchain. It represents a new approach to global economic coordination and infrastructure, built on the foundational principles of transparency and trust that define Circle:
+
+Purpose-built, not general-purpose
+
+Open and composable by default
+
+Market-neutral and multichain-aligned
+
+Built to coordinate, not control
+
+Trusted infrastructure, end-to-end
+
+What You Can Build with RAPBOTS
+
+Onchain Credit with Offchain Trust
+
+Design credit infrastructure that combines stablecoins with external trust signals:
+
+Identity-based lending protocols using verifiable credentials
+
+Reputation-driven credit systems tied to cash flow or payment history
+
+SMB and consumer credit apps serving under-served markets
+
+Capital markets settlement and tokenized collateral
+
+Modernize Capital Markets with Stablecoin-Native Settlement
+
+Tokenized securities platforms with instant Delivery versus Payment (DvP)
+
+Collateral management systems for stablecoin-backed margin
+
+Tokenized funds and structured products issued onchain
+
+Prediction markets trading real-time data, forecasts, and risk signals
+
+Create Markets and Services Around Stablecoin Conversion and FX
+
+Perpetuals and derivatives exchanges on stablecoin pairs
+
+Swap APIs for programmatic stablecoin-to-stablecoin conversion
+
+Treasury tools for multi-currency rebalancing and cross-border payouts
+
+Agentic Commerce
+
+Enable autonomous systems to transact natively onchain:
+
+AI-mediated marketplaces where agents buy, sell, and execute transactions
+
+Machine-to-machine payment networks for IoT and devices
+
+Coordination systems for agents to post, match, and settle intents in real time
+
+Cross-Border Payments and Payouts
+
+Power global money movement with fiat-backed stablecoins, instant settlement, and low fees:
+
+Remittance platforms for consumer transfers
+
+Payout systems for marketplaces, gig workers, and global payroll
+
+Trade finance platforms with tokenized invoices and automated onchain settlement

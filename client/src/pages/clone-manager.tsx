@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Bot, Zap, TrendingUp, Swords } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 interface UserClone {
   id: string;
@@ -26,6 +28,7 @@ export default function CloneManager() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+  const [battlesLimit, setBattlesLimit] = useState<string>("10");
 
   // Fetch user's clone
   const { data: clone, isLoading, error } = useQuery<UserClone>({
@@ -39,6 +42,12 @@ export default function CloneManager() {
       const response = await fetch('/api/user/clone/generate', {
         method: 'POST',
         credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          battlesLimit: battlesLimit === "all" ? 9999 : parseInt(battlesLimit) 
+        }),
       });
       if (!response.ok) {
         throw new Error('Failed to generate clone');
@@ -110,11 +119,29 @@ export default function CloneManager() {
               Generate your first clone to battle against yourself! Your clone will be created based on your past battle performance.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="battles-limit">Battles to Analyze</Label>
+              <Select value={battlesLimit} onValueChange={setBattlesLimit}>
+                <SelectTrigger id="battles-limit" data-testid="select-battles-limit">
+                  <SelectValue placeholder="Select battles to analyze" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">Last 10 Battles</SelectItem>
+                  <SelectItem value="25">Last 25 Battles</SelectItem>
+                  <SelectItem value="50">Last 50 Battles</SelectItem>
+                  <SelectItem value="all">All Battles</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-sm text-muted-foreground">
+                Analyzing more battles creates a more accurate clone
+              </p>
+            </div>
             <Button
               onClick={() => generateCloneMutation.mutate()}
               disabled={generateCloneMutation.isPending}
               size="lg"
+              data-testid="button-generate-clone"
             >
               {generateCloneMutation.isPending ? (
                 <>
@@ -181,28 +208,50 @@ export default function CloneManager() {
                 </div>
               </div>
 
-              <div className="flex gap-4 pt-4">
-                <Button
-                  onClick={handleBattleClone}
-                  size="lg"
-                  className="flex-1"
-                >
-                  <Swords className="mr-2 h-5 w-5" />
-                  Battle Your Clone
-                </Button>
-                <Button
-                  onClick={() => generateCloneMutation.mutate()}
-                  disabled={generateCloneMutation.isPending}
-                  variant="outline"
-                  size="lg"
-                >
-                  {generateCloneMutation.isPending ? (
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  ) : (
-                    <TrendingUp className="mr-2 h-5 w-5" />
-                  )}
-                  Update Clone
-                </Button>
+              <div className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="update-battles-limit">Battles to Analyze for Update</Label>
+                  <Select value={battlesLimit} onValueChange={setBattlesLimit}>
+                    <SelectTrigger id="update-battles-limit" data-testid="select-update-battles-limit">
+                      <SelectValue placeholder="Select battles to analyze" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">Last 10 Battles</SelectItem>
+                      <SelectItem value="25">Last 25 Battles</SelectItem>
+                      <SelectItem value="50">Last 50 Battles</SelectItem>
+                      <SelectItem value="all">All Battles</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-muted-foreground">
+                    More battles = better accuracy
+                  </p>
+                </div>
+
+                <div className="flex gap-4">
+                  <Button
+                    onClick={handleBattleClone}
+                    size="lg"
+                    className="flex-1"
+                    data-testid="button-battle-clone"
+                  >
+                    <Swords className="mr-2 h-5 w-5" />
+                    Battle Your Clone
+                  </Button>
+                  <Button
+                    onClick={() => generateCloneMutation.mutate()}
+                    disabled={generateCloneMutation.isPending}
+                    variant="outline"
+                    size="lg"
+                    data-testid="button-update-clone"
+                  >
+                    {generateCloneMutation.isPending ? (
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    ) : (
+                      <TrendingUp className="mr-2 h-5 w-5" />
+                    )}
+                    Update Clone
+                  </Button>
+                </div>
               </div>
 
               <div className="text-sm text-muted-foreground text-center pt-2">

@@ -20,6 +20,7 @@ The application is built with a clear separation between frontend and backend se
 - **Database Setup**: Successfully provisioned PostgreSQL database with all 9 tables (battles, battle_rounds, users, tournaments, tournament_battles, sessions, referrals, processed_webhook_events, user_clones)
 - **Router Configuration**: All 14 pages added to React Router (Landing, Home, Subscribe, BattleArena, Tournaments, TournamentDetail, TournamentLeaderboard, TournamentHistory, TournamentBrackets, FineTuning, Settings, CloneManager, Admin, NotFound)
 - **Development Mode**: Made Stripe and AI API keys optional for development - app runs without blocking on missing keys
+- **Clone Generation Enhancement**: Added configurable battle analysis - users can now choose to analyze 10, 25, 50, or all battles when generating/updating their AI clone for improved accuracy
 - **App Status**: Fully functional on port 5000 with database configured and all services initialized
 
 ### Previous Changes (September 5, 2025)

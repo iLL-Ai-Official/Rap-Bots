@@ -21,7 +21,7 @@ export const battles = pgTable("battles", {
   userId: varchar("user_id").references(() => users.id),
   userScore: integer("user_score").notNull().default(0),
   aiScore: integer("ai_score").notNull().default(0),
-  
+
   // PvP battle fields
   mode: text("mode").notNull().default("ai"), // 'ai' | 'pvp'
   challengerUserId: varchar("challenger_user_id").references(() => users.id),
@@ -32,7 +32,7 @@ export const battles = pgTable("battles", {
   maxRounds: integer("max_rounds").notNull().default(5),
   winnerUserId: varchar("winner_user_id").references(() => users.id),
   creditsPerPlayer: integer("credits_per_player").notNull().default(1),
-  
+
   difficulty: text("difficulty").notNull().default("normal"),
   profanityFilter: boolean("profanity_filter").notNull().default(false),
   aiCharacterId: text("ai_character_id"),
@@ -56,6 +56,9 @@ export const battles = pgTable("battles", {
   status: text("status").notNull().default("active"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),
+  videoGenerationId: text("video_generation_id"),
+  videoUrl: text("video_url"),
+  videoGeneratedAt: timestamp("video_generated_at"),
 });
 
 export const battleRounds = pgTable("battle_rounds", {
@@ -647,7 +650,7 @@ export type VoiceCommand = typeof voiceCommands.$inferSelect;
 export const MONETIZATION_CONFIG = {
   // Battle costs
   BATTLE_COST_CREDITS: 1, // Cost to start a battle
-  
+
   // Mining rewards
   MINING_REWARDS: {
     BATTLE_COMPLETE: "0.10000000", // Tokens per battle
@@ -656,21 +659,21 @@ export const MONETIZATION_CONFIG = {
     CLONE_BATTLED: "0.15000000", // When someone battles your clone
     REFERRAL: "1.00000000", // Referral bonus
   },
-  
+
   // Credit rewards
   CREDIT_REWARDS: {
     BATTLE_WIN: 2, // Credits earned for winning
     DAILY_LOGIN: 5, // Daily login bonus
     LEVEL_UP: 10, // Bonus credits when leveling up
   },
-  
+
   // Ad revenue
   AD_REVENUE: {
     PER_IMPRESSION: "0.0050", // $0.005 per ad view
     OWNER_SHARE: 0.70, // 70% goes to clone owner
     PLATFORM_SHARE: 0.30, // 30% goes to platform
   },
-  
+
   // Credit purchase packages
   CREDIT_PACKAGES: [
     { credits: 100, price: 0.99, bonus: 0 },
@@ -678,7 +681,7 @@ export const MONETIZATION_CONFIG = {
     { credits: 1000, price: 6.99, bonus: 150 },
     { credits: 5000, price: 24.99, bonus: 1000 },
   ],
-  
+
   // Arc blockchain USDC rewards (Hackathon feature!)
   ARC_REWARDS: {
     BATTLE_WIN_USDC: "0.10", // $0.10 USDC for winning a battle

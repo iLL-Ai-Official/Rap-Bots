@@ -1219,6 +1219,64 @@ export default function BattleArena() {
                 }
               />
 
+              {/* Generate Video Option */}
+              {rounds && rounds.length > 0 && (
+                <Card className="bg-purple-900/30 backdrop-blur-sm border-purple-500">
+                  <CardContent className="p-6">
+                    <h3 className="font-orbitron font-bold text-lg mb-4 text-purple-400">
+                      🎬 Generate Battle Video
+                    </h3>
+                    <p className="text-sm text-gray-300 mb-4">
+                      Create a cinematic AI-generated video of your battle round using Sora 2 Pro
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Cost:</span>
+                        <span className="text-purple-400 font-bold">50 Credits</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Duration:</span>
+                        <span className="text-gray-300">8 seconds, 1080p</span>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={async () => {
+                        if (!currentBattleId) return;
+                        try {
+                          const response = await fetch(
+                            `/api/battles/${currentBattleId}/rounds/${unifiedBattleState?.currentRound}/generate-video`,
+                            { method: 'POST', credentials: 'include' }
+                          );
+                          const data = await response.json();
+                          if (response.ok) {
+                            toast({
+                              title: "🎬 Video Generation Started!",
+                              description: `Processing... This takes ~90 seconds. ${data.creditsRemaining} credits remaining.`,
+                            });
+                          } else {
+                            toast({
+                              title: "Error",
+                              description: data.message,
+                              variant: "destructive"
+                            });
+                          }
+                        } catch (error) {
+                          toast({
+                            title: "Error",
+                            description: "Failed to start video generation",
+                            variant: "destructive"
+                          });
+                        }
+                      }}
+                      className="w-full mt-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+                      data-testid="button-generate-video"
+                    >
+                      🎬 Generate Video (50 Credits)
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Battle History */}
               <Card className="bg-battle-gray/30 backdrop-blur-sm border-gray-700">
                 <CardContent className="p-6">

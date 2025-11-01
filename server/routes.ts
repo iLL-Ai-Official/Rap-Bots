@@ -41,7 +41,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Service Worker endpoint for PWA functionality
   app.get('/sw.js', (req, res) => {
     const swPath = path.join(process.cwd(), 'public', 'sw.js');
-    
+
     if (fs.existsSync(swPath)) {
       res.set('Content-Type', 'application/javascript');
       res.set('Cache-Control', 'no-cache');
@@ -793,7 +793,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // SECURITY: Validate AI character selection (including clones)
       const validCharacters = ['razor', 'venom', 'silk', 'cypher'];
       const isCloneBattle = aiCharacterId?.startsWith('clone_');
-      
+
       if (aiCharacterId && !validCharacters.includes(aiCharacterId) && !isCloneBattle) {
         return res.status(400).json({ message: "Invalid AI character" });
       }
@@ -1189,18 +1189,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log(`🤖 Clone battle detected - adjusting AI to match user's skill level`);
         const cloneId = battle.aiCharacterId.replace('clone_', '');
         const clone = await storage.getCloneById(cloneId);
-        
+
         if (clone) {
           // Adjust AI difficulty based on clone's skill level
           adjustedComplexity = clone.avgRhymeDensity;
           adjustedIntensity = clone.skillLevel;
-          
+
           // Map skill level to difficulty
           if (clone.skillLevel < 40) adjustedDifficulty = 'easy';
           else if (clone.skillLevel >= 40 && clone.skillLevel < 65) adjustedDifficulty = 'normal';
           else if (clone.skillLevel >= 65 && clone.skillLevel < 85) adjustedDifficulty = 'hard';
           else adjustedDifficulty = 'nightmare';
-          
+
           console.log(`🎯 Clone AI settings: difficulty=${adjustedDifficulty}, complexity=${adjustedComplexity}, intensity=${adjustedIntensity}`);
         }
       }
@@ -1496,13 +1496,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const validatedData = insertTournamentSchema.parse(tournamentData);
 
       const tournament = await storage.createTournament(validatedData);
-      
+
       console.log(`🏆 Tournament created: ${tournament.name} (ID: ${tournament.id})`);
 
       // NOW process entry fee payment AFTER successful tournament creation
       if (entryFeeUSDC && parseFloat(entryFeeUSDC) > 0 && arcWallet) {
         const platformWallet = process.env.ARC_PLATFORM_WALLET || "0x0000000000000000000000000000000000000000";
-        
+
         // Transfer USDC from player to platform escrow
         const entryFeeTx = await arcService.transferUSDC({
           fromAddress: arcWallet.walletAddress,
@@ -1638,10 +1638,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         // Prepare winners for prize distribution
         const winnerPayouts = [];
-        
+
         // 1st place gets 50%, 2nd gets 30%, 3rd gets 20% of winners' pool
         const prizePercentages = [50, 30, 20];
-        
+
         for (let i = 0; i < Math.min(winners.length, 3); i++) {
           const winner = winners[i];
           if (winner.match.winner?.type === 'user') {
@@ -1670,7 +1670,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         for (const tx of txResults) {
           const isOrganizerTx = tx === txResults[0]; // First tx is organizer fee
           const winnerIndex = isOrganizerTx ? -1 : txResults.indexOf(tx) - 1;
-          
+
           await storage.recordArcTransaction({
             userId: isOrganizerTx ? tournament.userId : winnerPayouts[winnerIndex]?.address || userId,
             type: isOrganizerTx ? 'tournament_organizer_fee' : 'tournament_prize',
@@ -1914,7 +1914,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const clone = await storage.getUserClone(userId);
-      
+
       if (!clone) {
         return res.status(404).json({ message: 'No clone found. Create one by analyzing your battles!' });
       }
@@ -1930,13 +1930,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const { battlesLimit = 10 } = req.body;
-      
+
       // Validate battlesLimit
       const validatedLimit = Math.min(Math.max(parseInt(battlesLimit) || 10, 1), 9999);
-      
+
       console.log(`🤖 Generating clone for user ${userId} using ${validatedLimit} battles...`);
       const clone = await storage.createOrUpdateUserClone(userId, validatedLimit);
-      
+
       console.log(`✅ Clone generated: ${clone.cloneName} (Skill: ${clone.skillLevel}, analyzed ${clone.battlesAnalyzed} battles)`);
       res.json(clone);
     } catch (error) {
@@ -1949,7 +1949,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { cloneId } = req.params;
       const clone = await storage.getCloneById(cloneId);
-      
+
       if (!clone) {
         return res.status(404).json({ message: 'Clone not found' });
       }
@@ -1965,7 +1965,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.user.claims.sub;
       const clones = await storage.getAllAvailableClones(userId);
-      
+
       res.json(clones);
     } catch (error) {
       console.error('Error fetching available clones:', error);
@@ -2029,7 +2029,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/clone-battles/:battleId/round', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const { battleId } = req.params;
       const { roundNumber } = req.body;
 
@@ -2118,7 +2118,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/clone-battles/:battleId/complete', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const { battleId } = req.params;
 
       const battle = await storage.getBattle(battleId);
@@ -2159,9 +2159,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user's wallet
   app.get('/api/wallet', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const wallet = await storage.getOrCreateUserWallet(userId);
-      
+
       res.json(wallet);
     } catch (error) {
       console.error('Error fetching wallet:', error);
@@ -2172,11 +2172,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user's transactions
   app.get('/api/transactions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const limit = parseInt(req.query.limit as string) || 50;
-      
+
       const transactions = await storage.getUserTransactions(userId, limit);
-      
+
       res.json(transactions);
     } catch (error) {
       console.error('Error fetching transactions:', error);
@@ -2187,11 +2187,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user's mining events
   app.get('/api/mining/events', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const limit = parseInt(req.query.limit as string) || 50;
-      
+
       const events = await storage.getUserMiningEvents(userId, limit);
-      
+
       res.json(events);
     } catch (error) {
       console.error('Error fetching mining events:', error);
@@ -2202,14 +2202,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Claim daily login bonus
   app.post('/api/mining/daily-login', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      
+      const userId = req.claims.sub;
+
       // Check if already claimed today
       const wallet = await storage.getOrCreateUserWallet(userId);
-      
+
       const now = new Date();
       const lastClaim = wallet.lastDailyBonusAt ? new Date(wallet.lastDailyBonusAt) : null;
-      
+
       // Check if claimed in last 24 hours
       if (lastClaim) {
         const hoursSinceLastClaim = (now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60);
@@ -2221,25 +2221,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
       }
-      
+
       // Award tokens
       const result = await storage.awardMiningTokens(userId, "daily_login");
-      
+
       // Award credits
       const { MONETIZATION_CONFIG } = await import('@shared/schema');
       const newBalance = wallet.battleCredits + MONETIZATION_CONFIG.CREDIT_REWARDS.DAILY_LOGIN;
       await storage.updateWalletBalance(userId, { battleCredits: newBalance });
-      
+
       // Update last claim timestamp
       const { db } = await import('./db');
       const { userWallets } = await import('@shared/schema');
       const { eq } = await import('drizzle-orm');
-      
+
       await db
         .update(userWallets)
         .set({ lastDailyBonusAt: now })
         .where(eq(userWallets.userId, userId));
-      
+
       await storage.recordTransaction({
         userId,
         type: "mining",
@@ -2247,9 +2247,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currency: "credits",
         description: "Daily login bonus credits",
       });
-      
+
       console.log(`🎁 User ${userId} claimed daily bonus`);
-      
+
       res.json({ 
         tokens: result.tokens,
         credits: MONETIZATION_CONFIG.CREDIT_REWARDS.DAILY_LOGIN,
@@ -2264,9 +2264,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get clone ad revenue
   app.get('/api/credits/revenue', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const revenue = await storage.getCloneAdRevenue(userId);
-      
+
       res.json(revenue);
     } catch (error) {
       console.error('Error fetching ad revenue:', error);
@@ -2277,9 +2277,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Purchase credits (Stripe integration)
   app.post('/api/credits/purchase', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const { packageIndex } = req.body;
-      
+
       if (!stripe) {
         return res.status(503).json({ 
           message: 'Payment system unavailable in development mode. Please configure STRIPE_SECRET_KEY.' 
@@ -2288,7 +2288,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { MONETIZATION_CONFIG } = await import('@shared/schema');
       const pkg = MONETIZATION_CONFIG.CREDIT_PACKAGES[packageIndex];
-      
+
       if (!pkg) {
         return res.status(400).json({ message: 'Invalid package' });
       }
@@ -2416,15 +2416,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Security: Validate filename to prevent path traversal - Updated to allow all TTS audio files
       const allowedPrefixes = ['bark_', 'groq_tts_', 'elevenlabs_tts_', 'openai_tts_', 'typecast_tts_'];
       const allowedExtensions = ['.wav', '.mp3'];
-      
+
       const hasValidPrefix = allowedPrefixes.some(prefix => filename.startsWith(prefix));
       const hasValidExtension = allowedExtensions.some(ext => filename.endsWith(ext));
-      
+
       if (!hasValidPrefix || !hasValidExtension) {
         console.log('🚫 Audio file blocked - filename:', filename, 'hasValidPrefix:', hasValidPrefix, 'hasValidExtension:', hasValidExtension);
         return res.status(404).json({ message: 'File not found' });
       }
-      
+
       console.log('✅ Audio file allowed - filename:', filename);
 
       if (!fs.existsSync(filePath)) {
@@ -2435,7 +2435,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const contentType = filename.endsWith('.mp3') ? 'audio/mpeg' : 'audio/wav';
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
-      
+
       // Add CORS headers for cross-origin audio access
       res.setHeader('Access-Control-Allow-Origin', '*');
       res.setHeader('Access-Control-Allow-Methods', 'GET');
@@ -2452,7 +2452,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ===== ARC BLOCKCHAIN & VOICE COMMAND ROUTES (Hackathon Feature!) =====
-  
+
   // Initialize Arc blockchain service (production mode)
   // Note: Currently uses simulated blockchain for hackathon demo
   // Set ARC_DEMO_MODE=true environment variable to enable explicit demo logging
@@ -2463,11 +2463,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get or create Arc wallet for authenticated user
   app.get('/api/arc/wallet', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      
+      const userId = req.claims.sub;
+
       // Check if wallet already exists
       let wallet = await storage.getArcWallet(userId);
-      
+
       if (!wallet) {
         // Create new Arc wallet
         const walletAddress = await arcService.createWallet(userId);
@@ -2477,7 +2477,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Get current balance from Arc blockchain
       const usdcBalance = await arcService.getUSDCBalance(wallet.walletAddress);
-      
+
       // Update balance in database if changed
       if (usdcBalance !== wallet.usdcBalance) {
         wallet = await storage.updateArcWalletBalance(userId, { usdcBalance });
@@ -2493,11 +2493,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get Arc transaction history
   app.get('/api/arc/transactions', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const limit = parseInt(req.query.limit as string) || 20;
-      
+
       const transactions = await storage.getUserArcTransactions(userId, limit);
-      
+
       res.json(transactions);
     } catch (error: any) {
       console.error('Error getting Arc transactions:', error);
@@ -2508,7 +2508,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Process voice command (Hackathon key feature!)
   app.post('/api/arc/voice-command', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const { commandText } = req.body;
 
       if (!commandText) {
@@ -2586,11 +2586,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get voice command history
   app.get('/api/arc/voice-commands', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const limit = parseInt(req.query.limit as string) || 20;
-      
+
       const commands = await storage.getUserVoiceCommands(userId, limit);
-      
+
       res.json(commands);
     } catch (error: any) {
       console.error('Error getting voice commands:', error);
@@ -2601,7 +2601,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Award USDC for battle win (called internally after battle completion)
   app.post('/api/arc/award-battle-win', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const { battleId } = req.body;
 
       if (!battleId) {
@@ -2673,7 +2673,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create battle invite
   app.post('/api/pvp/challenges', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const { opponentId, settings } = req.body;
 
       if (!opponentId) {
@@ -2709,7 +2709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user's battle invites
   app.get('/api/pvp/challenges', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const type = (req.query.type as 'sent' | 'received' | 'all') || 'all';
 
       const invites = await storage.getUserBattleInvites(userId, type);
@@ -2747,7 +2747,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Accept battle invite
   app.post('/api/pvp/challenges/:id/accept', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const inviteId = req.params.id;
 
       const invite = await storage.getBattleInvite(inviteId);
@@ -2813,7 +2813,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Decline battle invite
   app.post('/api/pvp/challenges/:id/decline', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const inviteId = req.params.id;
 
       const invite = await storage.getBattleInvite(inviteId);
@@ -2838,7 +2838,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get active PvP battles for user
   app.get('/api/pvp/battles', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const battles = await storage.getActivePvPBattles(userId);
 
       // Attach opponent info to each battle
@@ -2848,7 +2848,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             ? battle.opponentUserId 
             : battle.challengerUserId;
           const opponent = opponentId ? await storage.getUser(opponentId) : null;
-          
+
           return {
             ...battle,
             opponent: opponent ? {
@@ -2871,7 +2871,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get specific PvP battle with submissions
   app.get('/api/pvp/battles/:id', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const battleId = req.params.id;
 
       const battle = await storage.getPvPBattle(battleId);
@@ -2913,7 +2913,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Submit round verse for PvP battle
   app.post('/api/pvp/battles/:id/rounds/:roundNumber/submit', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const battleId = req.params.id;
       const roundNumber = parseInt(req.params.roundNumber);
       const { verse, audioUrl } = req.body;
@@ -2972,12 +2972,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (bothSubmitted) {
         // Process the round and update scores
         await storage.processPvPRound(battleId, roundNumber);
-        
+
         // Switch turn to other player
         const nextTurn = battle.currentTurnUserId === battle.challengerUserId 
           ? battle.opponentUserId 
           : battle.challengerUserId;
-        
+
         await db.update(battles)
           .set({ currentTurnUserId: nextTurn })
           .where(eq(battles.id, battleId));
@@ -2997,7 +2997,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Forfeit PvP battle
   app.post('/api/pvp/battles/:id/forfeit', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const battleId = req.params.id;
 
       const battle = await storage.getPvPBattle(battleId);
@@ -3039,9 +3039,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Upload user photo and generate AI face-swapped rapper avatar
   app.post('/api/profile-pictures/upload', isAuthenticated, upload.single('photo'), async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const file = req.file;
-      
+
       if (!file) {
         return res.status(400).json({ message: 'No photo uploaded' });
       }
@@ -3069,11 +3069,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Generate face-swapped version in background
       // Using a default rapper template image
       const templateImage = 'https://via.placeholder.com/512/000000/FFFFFF/?text=Rapper+Template'; // TODO: Use real rapper template
-      
+
       try {
         // Import the Hugging Face service
         const { huggingFaceService } = await import('./services/huggingface');
-        
+
         if (!huggingFaceService.isConfigured()) {
           // Update status to failed if HF not configured
           await storage.updateProfilePictureStatus(picture.id, 'failed');
@@ -3105,7 +3105,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (error: any) {
         console.error('🔴 Face swap generation failed:', error);
         await storage.updateProfilePictureStatus(picture.id, 'failed');
-        
+
         res.status(500).json({
           message: 'Face swap generation failed',
           error: error.message,
@@ -3121,7 +3121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all profile pictures for current user
   app.get('/api/profile-pictures', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const pictures = await storage.getUserProfilePictures(userId);
       res.json(pictures);
     } catch (error: any) {
@@ -3133,7 +3133,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get active profile picture
   app.get('/api/profile-pictures/active', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const picture = await storage.getActiveProfilePicture(userId);
       res.json(picture || null);
     } catch (error: any) {
@@ -3145,13 +3145,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Set a profile picture as active
   app.post('/api/profile-pictures/:id/activate', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.claims.sub;
       const pictureId = req.params.id;
 
       // Verify user owns this picture
       const pictures = await storage.getUserProfilePictures(userId);
       const picture = pictures.find(p => p.id === pictureId);
-      
+
       if (!picture) {
         return res.status(404).json({ message: 'Profile picture not found' });
       }
@@ -3161,9 +3161,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const activatedPicture = await storage.setActiveProfilePicture(userId, pictureId);
-      
+
       console.log(`✅ Activated profile picture ${pictureId} for user ${userId}`);
-      
+
       res.json({
         success: true,
         picture: activatedPicture,
@@ -3174,6 +3174,133 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Sora video generation endpoints
+  app.post('/api/battles/:id/rounds/:roundNumber/generate-video', async (req, res) => {
+    // Check if the user is authenticated. If not, return 401 Unauthorized.
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const userId = req.user!.id; // Get the authenticated user's ID.
+    const { id: battleId, roundNumber } = req.params; // Extract battle ID and round number from request parameters.
+
+    try {
+      // Check user credits. A minimum of 50 credits is required for video generation.
+      const user = await storage.getUser(userId);
+      if (!user || user.credits < 50) {
+        // If the user doesn't have enough credits, return 403 Forbidden with details.
+        return res.status(403).json({ 
+          message: 'Insufficient credits. 50 credits required for video generation.',
+          required: 50,
+          current: user?.credits || 0
+        });
+      }
+
+      // Retrieve battle and round data from storage.
+      const battle = await storage.getBattle(Number(battleId));
+      if (!battle) {
+        // If battle not found, return 404 Not Found.
+        return res.status(404).json({ message: 'Battle not found' });
+      }
+
+      const rounds = await storage.getBattleRounds(Number(battleId));
+      const round = rounds.find(r => r.roundNumber === Number(roundNumber));
+
+      if (!round) {
+        // If round not found, return 404 Not Found.
+        return res.status(404).json({ message: 'Round not found' });
+      }
+
+      // Determine the character image URL. Prioritize opponent's clone image, fallback to a default Sora image.
+      const character = battle.opponentId ? 
+        (await storage.getClone(battle.opponentId)) : 
+        null;
+
+      const characterImageUrl = character?.profileImageUrl || 
+        'https://cdn.openai.com/API/docs/images/sora/woman_skyline_original_720p.jpeg'; // fallback
+
+      // Import the Sora video service and generate the video.
+      const { soraVideoService } = await import('./services/sora-video');
+      // The service returns the generation ID and the cost of the video generation.
+      const { generationId, cost } = await soraVideoService.generateBattleVideo(
+        battleId,
+        Number(roundNumber),
+        round.userVerse || '',
+        round.aiVerse || '',
+        characterImageUrl
+      );
+
+      // Deduct the cost of video generation from the user's credits.
+      await storage.updateUserCredits(userId, -cost);
+
+      // Store the video generation ID with the corresponding round data.
+      await storage.updateBattleRoundVideoGeneration(
+        Number(battleId),
+        Number(roundNumber),
+        generationId
+      );
+
+      // Log the video generation request.
+      console.log(`🎬 User ${userId} started video generation for battle ${battleId} round ${roundNumber} (${cost} credits)`);
+
+      // Return the generation ID, cost, and remaining credits to the client.
+      res.json({
+        generationId,
+        cost,
+        creditsRemaining: user.credits - cost
+      });
+    } catch (error) {
+      // Log and return any errors that occur during the process.
+      console.error('Video generation error:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Video generation failed' 
+      });
+    }
+  });
+
+  // Endpoint to check the status of a video generation request.
+  app.get('/api/battles/:id/rounds/:roundNumber/video-status', async (req, res) => {
+    // Check if the user is authenticated. If not, return 401 Unauthorized.
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+
+    const { id: battleId, roundNumber } = req.params; // Extract battle ID and round number.
+
+    try {
+      // Retrieve the round data, including the video generation ID.
+      const round = await storage.getBattleRound(Number(battleId), Number(roundNumber));
+
+      if (!round || !round.videoGenerationId) {
+        // If no video generation ID is found, return 404 Not Found.
+        return res.status(404).json({ message: 'No video generation found' });
+      }
+
+      // Import the Sora video service and get the video status.
+      const { soraVideoService } = await import('./services/sora-video');
+      const status = await soraVideoService.getVideoStatus(round.videoGenerationId);
+
+      // If the video generation is complete and a URL is available, update the round data.
+      if (status.status === 'complete' && status.video_url) {
+        await storage.updateBattleRoundVideoUrl(
+          Number(battleId),
+          Number(roundNumber),
+          status.video_url
+        );
+      }
+
+      // Return the video status to the client.
+      res.json(status);
+    } catch (error) {
+      // Log and return any errors that occur during status check.
+      console.error('Video status check error:', error);
+      res.status(500).json({ 
+        message: error instanceof Error ? error.message : 'Failed to check video status' 
+      });
+    }
+  });
+
+  // Arc blockchain wallet endpoints
   const httpServer = createServer(app);
   return httpServer;
 }

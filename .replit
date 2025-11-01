@@ -8,8 +8,8 @@ packages = ["antlr", "ffmpeg", "ffmpeg-full", "imagemagickBig", "jq", "jre", "li
 
 [deployment]
 deploymentTarget = "autoscale"
-build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+build = ["sh", "-c", "npm run build"]
+run = ["sh", "-c", "npm start"]
 
 [env]
 PORT = "5000"
@@ -59,6 +59,10 @@ expertMode = true
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 33055
+externalPort = 3002
 
 [[ports]]
 localPort = 36301

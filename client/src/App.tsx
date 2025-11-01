@@ -12,6 +12,7 @@ import Landing from "@/pages/Landing";
 import Home from "@/pages/Home";
 import Subscribe from "@/pages/Subscribe";
 import BattleArena from "@/pages/battle-arena";
+import PvPLobby from "@/pages/pvp-lobby";
 import Tournaments from "@/pages/tournaments";
 import TournamentDetail from "@/pages/tournament-detail";
 import TournamentLeaderboard from "@/pages/tournament-leaderboard";
@@ -21,6 +22,7 @@ import FineTuning from "@/pages/fine-tuning";
 import Settings from "@/pages/settings";
 import CloneManager from "@/pages/clone-manager";
 import Wallet from "@/pages/wallet";
+import Profile from "@/pages/profile";
 import NotFound from "@/pages/not-found";
 import AdminPage from "@/pages/admin";
 
@@ -50,6 +52,7 @@ function Router() {
           <Route path="/subscribe" component={Subscribe} />
           <Route path="/battle" component={BattleArena} />
           <Route path="/battle/:id" component={BattleArena} />
+          <Route path="/pvp" component={PvPLobby} />
           <Route path="/tournaments" component={Tournaments} />
           <Route path="/tournaments/leaderboard" component={TournamentLeaderboard} />
           <Route path="/tournaments/history" component={TournamentHistory} />
@@ -60,6 +63,8 @@ function Router() {
           <Route path="/settings" component={Settings} />
           <Route path="/clone" component={CloneManager} />
           <Route path="/wallet" component={Wallet} />
+          <Route path="/profile/:userId" component={Profile} />
+          <Route path="/profile" component={Profile} />
           <Route path="/admin" component={AdminPage} />
           <Route component={NotFound} />
         </>

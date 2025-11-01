@@ -14,12 +14,25 @@ export interface RoundScores {
   totalScore: number;
 }
 
-// Battles table with user authentication
+// Battles table with user authentication and PvP support
 export const battles = pgTable("battles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // AI battle fields (legacy, kept for backwards compatibility)
   userId: varchar("user_id").references(() => users.id),
   userScore: integer("user_score").notNull().default(0),
   aiScore: integer("ai_score").notNull().default(0),
+  
+  // PvP battle fields
+  mode: text("mode").notNull().default("ai"), // 'ai' | 'pvp'
+  challengerUserId: varchar("challenger_user_id").references(() => users.id),
+  opponentUserId: varchar("opponent_user_id").references(() => users.id),
+  currentTurnUserId: varchar("current_turn_user_id").references(() => users.id),
+  challengerScore: integer("challenger_score").notNull().default(0),
+  opponentScore: integer("opponent_score").notNull().default(0),
+  maxRounds: integer("max_rounds").notNull().default(5),
+  winnerUserId: varchar("winner_user_id").references(() => users.id),
+  creditsPerPlayer: integer("credits_per_player").notNull().default(1),
+  
   difficulty: text("difficulty").notNull().default("normal"),
   profanityFilter: boolean("profanity_filter").notNull().default(false),
   aiCharacterId: text("ai_character_id"),
@@ -58,6 +71,51 @@ export const battleRounds = pgTable("battle_rounds", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+// Battle Invites for PvP matchmaking
+export const battleInvites = pgTable("battle_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  challengerId: varchar("challenger_id").references(() => users.id).notNull(),
+  opponentId: varchar("opponent_id").references(() => users.id).notNull(),
+  battleId: varchar("battle_id").references(() => battles.id),
+  settings: jsonb("settings").$type<{
+    difficulty?: string;
+    profanityFilter?: boolean;
+    lyricComplexity?: number;
+    styleIntensity?: number;
+    maxRounds?: number;
+    creditsPerPlayer?: number;
+  }>().notNull().default({}),
+  status: text("status").notNull().default("pending"), // 'pending' | 'accepted' | 'declined' | 'expired'
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_battle_invites_challenger").on(table.challengerId),
+  index("idx_battle_invites_opponent").on(table.opponentId),
+  index("idx_battle_invites_status").on(table.status),
+]);
+
+// Battle Round Submissions for asynchronous PvP turns
+export const battleRoundSubmissions = pgTable("battle_round_submissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  battleId: varchar("battle_id").references(() => battles.id).notNull(),
+  roundNumber: integer("round_number").notNull(),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  role: text("role").notNull(), // 'challenger' | 'opponent'
+  verse: text("verse").notNull(),
+  audioUrl: text("audio_url"),
+  scores: jsonb("scores").$type<{
+    rhymeDensity: number;
+    flowQuality: number;
+    creativity: number;
+    totalScore: number;
+  }>(),
+  submittedAt: timestamp("submitted_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_battle_round_submissions_battle").on(table.battleId),
+  index("idx_battle_round_submissions_round").on(table.battleId, table.roundNumber),
+]);
+
 export const insertBattleSchema = createInsertSchema(battles).omit({
   id: true,
   createdAt: true,
@@ -69,10 +127,25 @@ export const insertBattleRoundSchema = createInsertSchema(battleRounds).omit({
   createdAt: true,
 });
 
+export const insertBattleInviteSchema = createInsertSchema(battleInvites).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertBattleRoundSubmissionSchema = createInsertSchema(battleRoundSubmissions).omit({
+  id: true,
+  submittedAt: true,
+});
+
 export type InsertBattle = z.infer<typeof insertBattleSchema>;
 export type Battle = typeof battles.$inferSelect;
 export type InsertBattleRound = z.infer<typeof insertBattleRoundSchema>;
 export type BattleRound = typeof battleRounds.$inferSelect;
+export type InsertBattleInvite = z.infer<typeof insertBattleInviteSchema>;
+export type BattleInvite = typeof battleInvites.$inferSelect;
+export type InsertBattleRoundSubmission = z.infer<typeof insertBattleRoundSubmissionSchema>;
+export type BattleRoundSubmission = typeof battleRoundSubmissions.$inferSelect;
 
 export interface BattleState {
   id: string;

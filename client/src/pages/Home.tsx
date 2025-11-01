@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Bot } from "lucide-react";
+import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Bot, User, Swords } from "lucide-react";
 import { Link } from "wouter";
 import { SocialShare } from "@/components/SocialShare";
 
@@ -89,6 +89,16 @@ export default function Home() {
           </div>
           
           <div className="flex items-center gap-4">
+            <Link href="/profile">
+              <Button 
+                variant="outline"
+                className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                data-testid="button-profile"
+              >
+                <User className="h-4 w-4 mr-2" />
+                Profile
+              </Button>
+            </Link>
             <Button 
               onClick={() => window.location.href = '/api/logout'}
               variant="outline"
@@ -190,6 +200,25 @@ export default function Home() {
                   </div>
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-r from-red-800 to-pink-600 border-red-500 text-white">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Swords className="h-5 w-5" />
+                PvP Battle
+              </CardTitle>
+              <CardDescription className="text-red-100">
+                Challenge other players in head-to-head rap battles
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href="/pvp">
+                <Button className="w-full bg-white text-red-600 hover:bg-gray-100 font-semibold" data-testid="button-pvp-lobby">
+                  PvP Lobby
+                </Button>
+              </Link>
             </CardContent>
           </Card>
 

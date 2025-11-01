@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Mic, Trophy, Clock, Flame, Wifi, History, Share, Dumbbell, User, BarChart3 } from "lucide-react";
+import { Mic, Trophy, Clock, Flame, Wifi, History, Share, Dumbbell, User, BarChart3, Swords } from "lucide-react";
 import { CharacterSelector } from "@/components/character-selector";
 import type { BattleCharacter } from "@shared/characters";
 import { cloneToBattleCharacter } from "@shared/characters";
@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useBattleState } from "@/hooks/use-battle-state";
+import { usePvPBattleState } from "@/hooks/use-pvp-battle-state";
 import { useSFXManager } from "@/hooks/useSFXManager";
 import { RecordingPanel } from "@/components/recording-panel";
 import { BattleAvatar } from "@/components/battle-avatar";
@@ -21,9 +22,19 @@ import { formatDuration } from "@/lib/audio-utils";
 import { preventMobileOverscroll, applyMobileScrollClasses } from "@/lib/mobile-scroll-prevention";
 import { motion, AnimatePresence } from "framer-motion";
 import { queryClient } from "@/lib/queryClient";
+import { useRoute } from "wouter";
 const battleArenaImage = "/images/Epic_rap_battle_arena_5a01b4d4.png";
 
 export default function BattleArena() {
+  // Detect battle mode from URL
+  const [, params] = useRoute("/battle/:id");
+  const urlParams = new URLSearchParams(window.location.search);
+  const battleMode = urlParams.get('mode') as 'ai' | 'pvp' || 'ai';
+  const battleId = params?.id;
+  
+  // Determine which hook to use based on battle mode
+  const isPvPMode = battleMode === 'pvp';
+  
   const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard">("normal");
   const [profanityFilter, setProfanityFilter] = useState(false);
   const [lyricComplexity, setLyricComplexity] = useState(75);
@@ -101,6 +112,13 @@ export default function BattleArena() {
     };
   }, [toast]);
   
+  // Use AI battle hook
+  const aiBattleHook = useBattleState();
+  
+  // Use PvP battle hook
+  const pvpBattleHook = usePvPBattleState(isPvPMode ? battleId : undefined);
+  
+  // Select the appropriate hook based on battle mode
   const {
     battleState,
     battle,
@@ -111,7 +129,37 @@ export default function BattleArena() {
     startNewBattle,
     updateBattleState,
     submitRound,
-  } = useBattleState();
+  } = isPvPMode ? {
+    battleState: undefined,
+    battle: pvpBattleHook.battle,
+    rounds: [],
+    currentBattleId: battleId,
+    isLoading: pvpBattleHook.isLoading,
+    isProcessing: pvpBattleHook.isSubmitting,
+    startNewBattle: () => {},
+    updateBattleState: () => {},
+    submitRound: async (verse: string) => {
+      return pvpBattleHook.submitRound(verse);
+    },
+  } : aiBattleHook;
+  
+  // PvP-specific state
+  const pvpState = isPvPMode ? pvpBattleHook : null;
+
+  // Create unified battle state that works for both AI and PvP modes
+  const unifiedBattleState = isPvPMode && pvpState && pvpState.battle ? {
+    currentRound: pvpState.currentRound || 1,
+    maxRounds: pvpState.battle.maxRounds ?? 5,
+    // Always show user's score first, opponent's score second
+    userScore: pvpState.battle.challengerScore ?? 0,
+    aiScore: pvpState.battle.opponentScore ?? 0,
+    timeRemaining: 120,
+    mode: 'pvp' as const,
+    status: pvpState.battle.status || 'active',
+    isAIResponding: pvpState.isSubmitting,
+    isPlayingAudio: false,
+    difficulty: 'normal' as const,
+  } : battleState;
 
   // Get latest round scores for authentic user stats (zero mock data)
   const getLatestUserScores = () => {
@@ -185,14 +233,14 @@ export default function BattleArena() {
 
   // Battle timer countdown
   useEffect(() => {
-    if (battleState?.timeRemaining && battleState.timeRemaining > 0) {
+    if (unifiedBattleState?.timeRemaining && unifiedBattleState.timeRemaining > 0) {
       const timer = setInterval(async () => {
-        const newTime = battleState.timeRemaining - 1;
+        const newTime = unifiedBattleState.timeRemaining - 1;
         setBattleTimer(newTime);
         if (newTime <= 0) {
           // 🏁 BATTLE ENDING - Play ending air horn effects
           console.log('🏁 Battle ended - playing ending effects');
-          const userWon = (battleState?.userScore || 0) > (battleState?.aiScore || 0);
+          const userWon = (unifiedBattleState?.userScore || 0) > (unifiedBattleState?.aiScore || 0);
           playEndingEffect(userWon ? 'victory' : 'defeat');
           
           // 🏆 Award Arc USDC for battle win
@@ -225,7 +273,7 @@ export default function BattleArena() {
 
       return () => clearInterval(timer);
     }
-  }, [battleState?.timeRemaining, updateBattleState, currentBattleId, arcBattleRewardMutation, toast]);
+  }, [unifiedBattleState?.timeRemaining, updateBattleState, currentBattleId, arcBattleRewardMutation, toast]);
 
   // Initialize mobile scroll prevention
   useEffect(() => {
@@ -307,6 +355,47 @@ export default function BattleArena() {
   }, [clearTypingTimer, cancelActiveRequest]);
 
   const handleRecordingComplete = async (recording: { blob: Blob; duration: number; url: string }) => {
+    // PvP mode: Submit to backend and wait for opponent
+    if (isPvPMode && pvpState) {
+      try {
+        setIsTranscribing(true);
+        
+        // Transcribe audio
+        const formData = new FormData();
+        formData.append('audio', recording.blob);
+        
+        const transcriptionResponse = await fetch(`/api/battles/${battleId}/transcribe`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (transcriptionResponse.ok) {
+          const { userText } = await transcriptionResponse.json();
+          setLiveTranscription(userText);
+          
+          // Submit to PvP battle
+          await pvpState.submitRound(userText);
+          
+          toast({
+            title: "✅ Round Submitted!",
+            description: pvpState.roundSubmissions.filter(s => !s.userId).length > 0 
+              ? "Both players submitted! Check the scores." 
+              : "Waiting for opponent...",
+          });
+        }
+      } catch (error) {
+        toast({
+          title: "Submission Error",
+          description: error instanceof Error ? error.message : "Failed to submit round",
+          variant: "destructive",
+        });
+      } finally {
+        setIsTranscribing(false);
+      }
+      return;
+    }
+    
+    // AI mode: Original flow
     try {
       // 🎯 RACE CONDITION PREVENTION - Generate unique request ID and setup AbortController
       const requestId = generateRequestId();
@@ -359,9 +448,9 @@ export default function BattleArena() {
             if (transcriptionData.userText && transcriptionData.userText.length > 50 && transcriptionData.userText.split(' ').length > 8) {
               console.log('🧠 Triggering intelligent crowd reaction for substantial performance:', transcriptionData.userText.substring(0, 50) + '...');
               playIntelligentCrowdReaction(transcriptionData.userText, {
-                battlePhase: battleState?.currentRound === 1 ? 'opening' : 
-                           battleState?.currentRound === battleState?.maxRounds ? 'closing' : 'middle',
-                userPerformanceScore: battleState?.userScore
+                battlePhase: unifiedBattleState?.currentRound === 1 ? 'opening' : 
+                           unifiedBattleState?.currentRound === unifiedBattleState?.maxRounds ? 'closing' : 'middle',
+                userPerformanceScore: unifiedBattleState?.userScore
               });
             } else {
               console.log('🧠 Skipping user crowd reaction - performance too brief:', transcriptionData.userText?.length || 0, 'chars');
@@ -415,7 +504,7 @@ export default function BattleArena() {
           if (result.aiResponse && result.aiResponse.length > 20 && (result.aiScore || 0) > 70) {
             console.log('🤖 Triggering AI crowd reaction for high-scoring response:', result.aiResponse.substring(0, 50) + '...');
             playIntelligentCrowdReaction(result.aiResponse, {
-              battlePhase: (battleState?.currentRound || 1) === (battleState?.maxRounds || 3) ? 'closing' : 'middle',
+              battlePhase: (unifiedBattleState?.currentRound || 1) === (unifiedBattleState?.maxRounds || 3) ? 'closing' : 'middle',
               userPerformanceScore: result.aiScore || 0
             });
           } else {
@@ -526,9 +615,9 @@ export default function BattleArena() {
   };
 
   const getProgressPercentage = () => {
-    if (!battleState) return 50;
-    const total = battleState.userScore + battleState.aiScore;
-    return total > 0 ? (battleState.userScore / total) * 100 : 50;
+    if (!unifiedBattleState) return 50;
+    const total = (unifiedBattleState?.userScore || 0) + (unifiedBattleState?.aiScore || 0);
+    return total > 0 ? ((unifiedBattleState?.userScore || 0) / total) * 100 : 50;
   };
 
   const getConnectionStatus = () => {
@@ -578,7 +667,7 @@ export default function BattleArena() {
             <div className="text-sm text-gray-400">
               <span>Score: </span>
               <span className="text-accent-blue font-semibold">
-                {battleState?.userScore || 0}
+                {unifiedBattleState?.userScore || 0}
               </span>
             </div>
             {/* Arc USDC Balance */}
@@ -668,33 +757,55 @@ export default function BattleArena() {
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center space-x-4">
-                  <Badge className="bg-accent-red text-white px-3 py-1">
-                    <Flame className="mr-1" size={16} />
-                    BATTLE MODE
+                  <Badge className={isPvPMode ? "bg-purple-600 text-white px-3 py-1" : "bg-accent-red text-white px-3 py-1"}>
+                    {isPvPMode ? <Swords className="mr-1" size={16} /> : <Flame className="mr-1" size={16} />}
+                    {isPvPMode ? "PvP BATTLE" : "BATTLE MODE"}
                   </Badge>
                   <div className="text-accent-gold font-semibold" data-testid="text-current-round">
-                    Round {battleState?.currentRound || 1}/{battleState?.maxRounds || 3}
+                    Round {isPvPMode ? pvpState?.currentRound || 1 : unifiedBattleState?.currentRound || 1}/{isPvPMode ? 3 : unifiedBattleState?.maxRounds || 3}
                   </div>
+                  {/* PvP Turn Indicator */}
+                  {isPvPMode && pvpState && (
+                    <Badge 
+                      className={pvpState.isYourTurn ? "bg-green-600 text-white px-3 py-1" : "bg-gray-600 text-white px-3 py-1"}
+                      data-testid="badge-turn-indicator"
+                    >
+                      {pvpState.isYourTurn ? "🎤 Your Turn" : "⏳ Opponent's Turn"}
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center space-x-4">
-                  {/* Battle Timer */}
-                  <div className="flex items-center space-x-2 bg-secondary-dark/40 backdrop-blur-sm px-4 py-2 rounded-lg">
-                    <Clock className="text-accent-blue" size={16} />
-                    <span className="font-orbitron font-bold text-lg" data-testid="text-battle-timer">
-                      {formatDuration(battleTimer)}
-                    </span>
-                  </div>
-                  {/* Difficulty */}
-                  <Select value={difficulty} onValueChange={handleDifficultyChange}>
-                    <SelectTrigger className="w-32 bg-secondary-dark/40 backdrop-blur-sm border-gray-600" data-testid="select-difficulty">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-secondary-dark/90 backdrop-blur border-gray-600">
-                      <SelectItem value="easy">Easy</SelectItem>
-                      <SelectItem value="normal">Normal</SelectItem>
-                      <SelectItem value="hard">Hard</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {/* PvP Opponent Info */}
+                  {isPvPMode && pvpState?.opponent && (
+                    <div className="flex items-center space-x-2 bg-secondary-dark/40 backdrop-blur-sm px-4 py-2 rounded-lg" data-testid="div-opponent-info">
+                      <User className="text-purple-400" size={16} />
+                      <span className="text-sm font-semibold text-purple-400">
+                        vs {pvpState.opponent.firstName} {pvpState.opponent.lastName}
+                      </span>
+                    </div>
+                  )}
+                  {/* Battle Timer (AI mode only) */}
+                  {!isPvPMode && (
+                    <div className="flex items-center space-x-2 bg-secondary-dark/40 backdrop-blur-sm px-4 py-2 rounded-lg">
+                      <Clock className="text-accent-blue" size={16} />
+                      <span className="font-orbitron font-bold text-lg" data-testid="text-battle-timer">
+                        {formatDuration(battleTimer)}
+                      </span>
+                    </div>
+                  )}
+                  {/* Difficulty (AI mode only) */}
+                  {!isPvPMode && (
+                    <Select value={difficulty} onValueChange={handleDifficultyChange}>
+                      <SelectTrigger className="w-32 bg-secondary-dark/40 backdrop-blur-sm border-gray-600" data-testid="select-difficulty">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-secondary-dark/90 backdrop-blur border-gray-600">
+                        <SelectItem value="easy">Easy</SelectItem>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="hard">Hard</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               </div>
               
@@ -704,10 +815,10 @@ export default function BattleArena() {
                   <div className="text-center bg-secondary-dark/30 backdrop-blur-sm rounded-lg px-6 py-4 border border-accent-blue/30">
                     <div className="text-accent-blue font-semibold text-sm">YOU</div>
                     <div className="text-3xl font-orbitron font-bold text-white" data-testid="text-user-score">
-                      {battleState?.userScore || 0}
+                      {unifiedBattleState?.userScore || 0}
                     </div>
                     <div className="text-xs text-gray-400 mt-1">
-                      Round {battleState?.currentRound || 1} Score
+                      Round {unifiedBattleState?.currentRound || 1} Score
                     </div>
                   </div>
                   
@@ -721,18 +832,18 @@ export default function BattleArena() {
                       BATTLE SCORE
                     </div>
                     <div className="text-xs text-gray-400">
-                      {(battleState?.userScore || 0) > (battleState?.aiScore || 0) ? "YOU LEAD" : 
-                       (battleState?.aiScore || 0) > (battleState?.userScore || 0) ? "AI LEADS" : "TIED"}
+                      {(unifiedBattleState?.userScore || 0) > (unifiedBattleState?.aiScore || 0) ? "YOU LEAD" : 
+                       (unifiedBattleState?.aiScore || 0) > (unifiedBattleState?.userScore || 0) ? "AI LEADS" : "TIED"}
                     </div>
                   </div>
                   
                   <div className="text-center bg-secondary-dark/30 backdrop-blur-sm rounded-lg px-6 py-4 border border-accent-red/30">
                     <div className="text-accent-red font-semibold text-sm">AI BOT</div>
                     <div className="text-3xl font-orbitron font-bold text-white" data-testid="text-ai-score">
-                      {battleState?.aiScore || 0}
+                      {unifiedBattleState?.aiScore || 0}
                     </div>
                     <div className="text-xs text-gray-400 mt-1">
-                      Round {battleState?.currentRound || 1} Score
+                      Round {unifiedBattleState?.currentRound || 1} Score
                     </div>
                   </div>
                 </div>
@@ -759,30 +870,74 @@ export default function BattleArena() {
             {/* User Controls Panel */}
             <div className="space-y-6">
               {/* Recording Panel */}
-              <RecordingPanel
-                onRecordingComplete={handleRecordingComplete}
-                onRecordingStart={handleRecordingStart}
-                onTextSubmit={async (text) => {
-                  console.log('📝 User submitted text verse:', text.substring(0, 50) + '...');
-                  triggerCrowdOnSpeech();
+              {/* PvP Waiting State */}
+              {isPvPMode && pvpState && !pvpState.isYourTurn && (
+                <Card className="bg-purple-900/30 backdrop-blur-sm border-purple-500" data-testid="card-waiting-opponent">
+                  <CardContent className="p-6 text-center">
+                    <div className="flex flex-col items-center space-y-4">
+                      <div className="animate-pulse">
+                        <Swords className="text-purple-400 w-12 h-12" />
+                      </div>
+                      <h3 className="font-orbitron font-bold text-lg text-purple-400">
+                        Waiting for Opponent
+                      </h3>
+                      <p className="text-gray-400 text-sm">
+                        {pvpState.roundSubmissions.some(s => s.userId === pvpState.opponent?.id)
+                          ? "Your opponent is preparing their verse..."
+                          : "Your opponent hasn't submitted yet"}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {/* Recording Panel - Disabled in PvP when not your turn */}
+              {(!isPvPMode || pvpState?.isYourTurn) && (
+                <RecordingPanel
+                  onRecordingComplete={handleRecordingComplete}
+                  onRecordingStart={handleRecordingStart}
+                  onTextSubmit={async (text) => {
+                    console.log('📝 User submitted text verse:', text.substring(0, 50) + '...');
+                    
+                    // PvP mode text submission
+                    if (isPvPMode && pvpState) {
+                      try {
+                        await pvpState.submitRound(text);
+                        setLiveTranscription(text);
+                        toast({
+                          title: "✅ Round Submitted!",
+                          description: "Waiting for opponent...",
+                        });
+                      } catch (error) {
+                        toast({
+                          title: "Submission Error",
+                          description: error instanceof Error ? error.message : "Failed to submit round",
+                          variant: "destructive",
+                        });
+                      }
+                      return;
+                    }
+                    
+                    // AI mode text submission (original flow)
+                    triggerCrowdOnSpeech();
                   
-                  // 🎯 RACE CONDITION PREVENTION - Generate unique request ID and setup AbortController
-                  const requestId = generateRequestId();
-                  setCurrentRequestId(requestId);
-                  console.log('🎯 Starting text submission with request ID:', requestId);
-                  
-                  // Cancel any previous requests and clear timers
-                  clearTypingTimer();
-                  cancelActiveRequest();
-                  
-                  // Setup new AbortController for this request
-                  const abortController = new AbortController();
-                  abortControllerRef.current = abortController;
-                  
-                  // Start AI responding state
-                  updateBattleState({ isAIResponding: true });
-                  
-                  try {
+                    // 🎯 RACE CONDITION PREVENTION - Generate unique request ID and setup AbortController
+                    const requestId = generateRequestId();
+                    setCurrentRequestId(requestId);
+                    console.log('🎯 Starting text submission with request ID:', requestId);
+                    
+                    // Cancel any previous requests and clear timers
+                    clearTypingTimer();
+                    cancelActiveRequest();
+                    
+                    // Setup new AbortController for this request
+                    const abortController = new AbortController();
+                    abortControllerRef.current = abortController;
+                    
+                    // Start AI responding state
+                    updateBattleState({ isAIResponding: true });
+                    
+                    try {
                     const result = await submitRound({ userVerse: text });
                     
                     if (result) {
@@ -817,7 +972,7 @@ export default function BattleArena() {
                         if (result.aiResponse && result.aiResponse.length > 20 && (result.aiScore || 0) > 70) {
                           console.log('🤖 Triggering AI crowd reaction for high-scoring response:', result.aiResponse.substring(0, 50) + '...');
                           playIntelligentCrowdReaction(result.aiResponse, {
-                            battlePhase: (battleState?.currentRound || 1) === (battleState?.maxRounds || 3) ? 'closing' : 'middle',
+                            battlePhase: (unifiedBattleState?.currentRound || 1) === (unifiedBattleState?.maxRounds || 3) ? 'closing' : 'middle',
                             userPerformanceScore: result.aiScore || 0
                           });
                         }
@@ -900,8 +1055,9 @@ export default function BattleArena() {
                 onLyricComplexityChange={setLyricComplexity}
                 styleIntensity={styleIntensity}
                 onStyleIntensityChange={setStyleIntensity}
-                disabled={isProcessing || battleState?.isAIResponding}
+                disabled={isProcessing || unifiedBattleState?.isAIResponding}
               />
+              )}
 
               {/* User Score Panel */}
               <Card className="bg-battle-gray/30 backdrop-blur-sm border-gray-700">
@@ -939,7 +1095,7 @@ export default function BattleArena() {
                     <div className="pt-4 border-t border-gray-600">
                       <div className="text-center">
                         <div className="text-2xl font-orbitron font-bold text-accent-gold" data-testid="text-total-score">
-                          {battleState?.userScore || 0}
+                          {unifiedBattleState?.userScore || 0}
                         </div>
                         <div className="text-sm text-gray-400">Total Score</div>
                       </div>
@@ -953,8 +1109,8 @@ export default function BattleArena() {
             <div className="space-y-6">
               {/* Avatar Section */}
               <BattleAvatar
-                isAISpeaking={battleState?.isPlayingAudio || false}
-                battleState={battleState?.isAIResponding ? "battle" : "idle"}
+                isAISpeaking={unifiedBattleState?.isPlayingAudio || false}
+                battleState={unifiedBattleState?.isAIResponding ? "battle" : "idle"}
                 audioUrl={currentAiAudio}
                 character={selectedCharacter || undefined}
               />
@@ -966,16 +1122,53 @@ export default function BattleArena() {
               </div>
 
               {/* Battle Text Display */}
-              <BattleTextDisplay
-                liveTranscription={liveTranscription}
-                aiResponse={aiResponse}
-                isTranscribing={isTranscribing}
-                isAIGenerating={battleState?.isAIResponding}
-                onClear={() => {
-                  setLiveTranscription("");
-                  setAiResponse("");
-                }}
-              />
+              {isPvPMode && pvpState ? (
+                <Card className="bg-battle-gray/30 backdrop-blur-sm border-gray-700" data-testid="card-pvp-verses">
+                  <CardContent className="p-4 space-y-4">
+                    {/* Your Verse */}
+                    <div className="border-b border-gray-600 pb-4">
+                      <h3 className="text-sm font-semibold text-blue-400 mb-2">Your Verse:</h3>
+                      <div className="text-white" data-testid="text-your-verse">
+                        {liveTranscription || <span className="text-gray-500 italic">No submission yet...</span>}
+                      </div>
+                    </div>
+                    
+                    {/* Opponent's Verse */}
+                    <div>
+                      <h3 className="text-sm font-semibold text-purple-400 mb-2">
+                        {pvpState.opponent?.firstName}'s Verse:
+                      </h3>
+                      <div className="text-white" data-testid="text-opponent-verse">
+                        {pvpState.roundSubmissions.find(s => s.userId === pvpState.opponent?.id)?.verse || (
+                          <span className="text-gray-500 italic">Waiting for opponent...</span>
+                        )}
+                      </div>
+                      {/* Opponent Audio - if available */}
+                      {pvpState.roundSubmissions.find(s => s.userId === pvpState.opponent?.id)?.audioUrl && (
+                        <div className="mt-2">
+                          <audio 
+                            src={pvpState.roundSubmissions.find(s => s.userId === pvpState.opponent?.id)?.audioUrl || undefined}
+                            controls
+                            className="w-full"
+                            data-testid="audio-opponent"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <BattleTextDisplay
+                  liveTranscription={liveTranscription}
+                  aiResponse={aiResponse}
+                  isTranscribing={isTranscribing}
+                  isAIGenerating={unifiedBattleState?.isAIResponding}
+                  onClear={() => {
+                    setLiveTranscription("");
+                    setAiResponse("");
+                  }}
+                />
+              )}
 
               {/* Lyric Analysis Buttons */}
               {(liveTranscription || aiResponse) && (
@@ -1137,7 +1330,7 @@ export default function BattleArena() {
             <div className="text-sm">
               <div className="font-semibold">Battle in Progress</div>
               <div className="text-gray-400" data-testid="text-battle-status">
-                Round {battleState?.currentRound || 1} of {battleState?.maxRounds || 3}
+                Round {unifiedBattleState?.currentRound || 1} of {unifiedBattleState?.maxRounds || 3}
               </div>
             </div>
           </div>

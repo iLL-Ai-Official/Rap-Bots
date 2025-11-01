@@ -679,6 +679,31 @@ export const MONETIZATION_CONFIG = {
   },
 } as const;
 
+// User Profile Pictures - AI face-swapped avatars
+export const userProfilePictures = pgTable("user_profile_pictures", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  originalPhotoUrl: text("original_photo_url").notNull(), // User's uploaded photo
+  generatedImageUrl: text("generated_image_url"), // Face-swapped rapper avatar
+  templateUsed: text("template_used"), // Which rapper template was used
+  status: text("status").notNull().default("processing"), // 'processing' | 'completed' | 'failed'
+  isActive: boolean("is_active").notNull().default(false), // Currently used as profile pic
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_user_profile_pictures_user").on(table.userId),
+  index("idx_user_profile_pictures_active").on(table.userId, table.isActive),
+]);
+
+export const insertUserProfilePictureSchema = createInsertSchema(userProfilePictures).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertUserProfilePicture = z.infer<typeof insertUserProfilePictureSchema>;
+export type UserProfilePicture = typeof userProfilePictures.$inferSelect;
+
 // ElevenLabs API constants for hackathon
 export const ELEVENLABS_CONFIG = {
   BASE_URL: "https://api.elevenlabs.io/v1",

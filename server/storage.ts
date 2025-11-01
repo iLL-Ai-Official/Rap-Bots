@@ -15,6 +15,7 @@ import {
   arcWallets,
   arcTransactions,
   voiceCommands,
+  userProfilePictures,
   type User,
   type UpsertUser,
   type Battle,
@@ -51,6 +52,8 @@ import {
   type InsertArcTransaction,
   type VoiceCommand,
   type InsertVoiceCommand,
+  type UserProfilePicture,
+  type InsertUserProfilePicture,
   SUBSCRIPTION_TIERS,
   MONETIZATION_CONFIG,
 } from "@shared/schema";
@@ -201,6 +204,13 @@ export interface IStorage {
   getPvPBattle(battleId: string): Promise<Battle | undefined>;
   getUserPvPBattles(userId: string): Promise<Battle[]>;
   getActivePvPBattles(userId: string): Promise<Battle[]>;
+
+  // User Profile Picture operations (Hackathon AI face-swap feature!)
+  createProfilePicture(data: InsertUserProfilePicture): Promise<UserProfilePicture>;
+  getUserProfilePictures(userId: string): Promise<UserProfilePicture[]>;
+  getActiveProfilePicture(userId: string): Promise<UserProfilePicture | undefined>;
+  updateProfilePictureStatus(id: string, status: string, generatedImageUrl?: string): Promise<UserProfilePicture>;
+  setActiveProfilePicture(userId: string, pictureId: string): Promise<UserProfilePicture>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1805,6 +1815,77 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(battles.createdAt));
     
     return activeBattles;
+  }
+
+  // User Profile Picture operations (Hackathon AI face-swap feature!)
+  async createProfilePicture(data: InsertUserProfilePicture): Promise<UserProfilePicture> {
+    const [picture] = await db
+      .insert(userProfilePictures)
+      .values(data)
+      .returning();
+    
+    return picture;
+  }
+
+  async getUserProfilePictures(userId: string): Promise<UserProfilePicture[]> {
+    const pictures = await db
+      .select()
+      .from(userProfilePictures)
+      .where(eq(userProfilePictures.userId, userId))
+      .orderBy(desc(userProfilePictures.createdAt));
+    
+    return pictures;
+  }
+
+  async getActiveProfilePicture(userId: string): Promise<UserProfilePicture | undefined> {
+    const [picture] = await db
+      .select()
+      .from(userProfilePictures)
+      .where(
+        and(
+          eq(userProfilePictures.userId, userId),
+          eq(userProfilePictures.isActive, true)
+        )
+      );
+    
+    return picture;
+  }
+
+  async updateProfilePictureStatus(id: string, status: string, generatedImageUrl?: string): Promise<UserProfilePicture> {
+    const updateData: any = { status, updatedAt: new Date() };
+    if (generatedImageUrl) {
+      updateData.generatedImageUrl = generatedImageUrl;
+    }
+
+    const [picture] = await db
+      .update(userProfilePictures)
+      .set(updateData)
+      .where(eq(userProfilePictures.id, id))
+      .returning();
+    
+    return picture;
+  }
+
+  async setActiveProfilePicture(userId: string, pictureId: string): Promise<UserProfilePicture> {
+    // Deactivate all other profile pictures for this user
+    await db
+      .update(userProfilePictures)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(userProfilePictures.userId, userId));
+    
+    // Activate the selected picture
+    const [picture] = await db
+      .update(userProfilePictures)
+      .set({ isActive: true, updatedAt: new Date() })
+      .where(eq(userProfilePictures.id, pictureId))
+      .returning();
+    
+    // Update user's profileImageUrl
+    if (picture.generatedImageUrl) {
+      await this.updateUser(userId, { profileImageUrl: picture.generatedImageUrl });
+    }
+    
+    return picture;
   }
 }
 

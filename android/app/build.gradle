@@ -1,0 +1,81 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+plugins {
+  id 'com.android.application'
+  id 'org.jetbrains.kotlin.android'
+}
+
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+if (keystorePropertiesFile.exists()) {
+  keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
+android {
+  namespace 'com.rapbots'
+  compileSdk 34
+
+  defaultConfig {
+    applicationId "com.rapbots"
+    minSdk 23
+    targetSdk 34
+    versionCode 1
+    versionName "1.0"
+
+    testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    def defaultAppUrl = "https://rapbots.example.com"
+    def appUrl = project.hasProperty("RAPBOTS_APP_URL") ? project.getProperty("RAPBOTS_APP_URL") : defaultAppUrl
+    if (!appUrl?.trim()) {
+      appUrl = defaultAppUrl
+    }
+    buildConfigField "String", "APP_URL", "\"${appUrl}\""
+  }
+
+  signingConfigs {
+    debug {
+      // Uses default debug keystore.
+    }
+    release {
+      if (keystorePropertiesFile.exists()) {
+        storeFile keystoreProperties["storeFile"] ? file(keystoreProperties["storeFile"]) : null
+        storePassword keystoreProperties["storePassword"]
+        keyAlias keystoreProperties["keyAlias"]
+        keyPassword keystoreProperties["keyPassword"]
+      }
+    }
+  }
+
+  buildTypes {
+    debug {
+      applicationIdSuffix ".debug"
+      versionNameSuffix "-debug"
+      signingConfig signingConfigs.debug
+      // Inject dev server URL for WebView
+      buildConfigField "String", "APP_URL", "\"http://10.0.2.2:5000\""
+    }
+    release {
+      minifyEnabled false
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+      signingConfig keystorePropertiesFile.exists() ? signingConfigs.release : signingConfigs.debug
+    }
+  }
+
+  compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+  }
+
+  kotlinOptions {
+    jvmTarget = '17'
+  }
+}
+
+dependencies {
+  implementation "androidx.core:core-ktx:1.13.1"
+  implementation "androidx.appcompat:appcompat:1.7.0"
+  implementation "com.google.android.material:material:1.12.0"
+  implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+  implementation "androidx.webkit:webkit:1.11.0"
+  implementation "androidx.activity:activity-ktx:1.9.3"
+}

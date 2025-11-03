@@ -25,9 +25,19 @@ export default function TournamentLeaderboard() {
   const { user } = useAuth();
 
   // Fetch global tournament leaderboard
-  const { data: leaderboard, isLoading } = useQuery<LeaderboardEntry[]>({
+  const query = useQuery<LeaderboardEntry[]>({
     queryKey: ['/api/tournaments/leaderboard'],
+    // explicit queryFn so the returned data isn't inferred as unknown
+    queryFn: async () => {
+      const res = await fetch('/api/tournaments/leaderboard');
+      if (!res.ok) throw new Error('Failed to fetch leaderboard');
+      const json = await res.json();
+      return json as LeaderboardEntry[];
+    }
   });
+
+  const leaderboard = query.data as LeaderboardEntry[] | undefined;
+  const isLoading = query.isLoading;
 
   const getRankIcon = (rank: number) => {
     switch (rank) {
@@ -171,8 +181,7 @@ export default function TournamentLeaderboard() {
         </div>
 
         {/* Leaderboard */}
-        {/* @ts-ignore - Card children type inference issue with query data */}
-        <Card className="bg-gray-900 border-gray-700">
+  <Card className="bg-gray-900 border-gray-700">
           <CardHeader>
             <CardTitle className="text-white flex items-center">
               <Crown className="mr-2 text-yellow-400" size={24} />
@@ -180,7 +189,7 @@ export default function TournamentLeaderboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <>{renderLeaderboardContent()}</>
+            {renderLeaderboardContent() as React.ReactNode}
           </CardContent>
         </Card>
 
@@ -234,7 +243,7 @@ export default function TournamentLeaderboard() {
 
         {/* Social Sharing for User's Rank */}
         {user && leaderboard && (() => {
-          const userEntry = leaderboard.find(entry => entry.userId === (user as any).id);
+          const userEntry = leaderboard.find(entry => entry.userId === user?.id);
           if (userEntry) {
             return (
               <div className="mt-8">

@@ -1,0 +1,6 @@
+<resources>
+    <color name="primary">#FF8800</color>
+    <color name="primary_dark">#FF5500</color>
+    <color name="secondary">#1E1E2E</color>
+    <color name="white">#FFFFFFFF</color>
+</resources>

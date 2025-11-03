@@ -4,19 +4,20 @@ import Stripe from "stripe";
 import { storage } from "./storage";
 import { ObjectStorageService } from "./objectStorage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
-import { SUBSCRIPTION_TIERS, insertTournamentSchema, processedWebhookEvents, insertWebhookEventSchema } from "@shared/schema";
+import { SUBSCRIPTION_TIERS, insertTournamentSchema } from "@shared/schema";
 import { groqService } from "./services/groq";
-import { typecastService } from "./services/typecast";
-import { barkTTS } from "./services/bark";
 import { scoringService } from "./services/scoring";
 import { userTTSManager } from "./services/user-tts-manager";
 import { crowdReactionService } from "./services/crowdReactionService";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { db } from "./db.js";
-import { users, battles, tournaments } from "@shared/schema";
-import { eq, sql } from "drizzle-orm";
+import { matchmakingService } from "./services/matchmaking";
+import { FineTuningService } from "./services/fine-tuning";
+import { realtimeAnalysisService, RealtimeAnalysisService } from "./services/realtime-analysis";
+import { mlRapperCloningService, MLRapperCloningService } from "./services/ml-rapper-cloning";
+import { CharacterCardGenerator, characterCardGenerator } from "./services/characterCardGenerator";
+// using shared exported instance from services/matchmaking
 
 // Configure multer for audio uploads
 const upload = multer({
@@ -37,7 +38,7 @@ if (!stripe) {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Service Worker endpoint for PWA functionality
-  app.get('/sw.js', (req, res) => {
+  app.get('/sw.js', (_req, res) => {
     const swPath = path.join(process.cwd(), 'public', 'sw.js');
     
     if (fs.existsSync(swPath)) {
@@ -50,7 +51,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Sitemap.xml endpoint for SEO
-  app.get('/sitemap.xml', (req, res) => {
+  app.get('/sitemap.xml', (_req, res) => {
     const sitemapPath = path.join(process.cwd(), 'public', 'sitemap.xml');
 
     if (fs.existsSync(sitemapPath)) {
@@ -62,7 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Health check endpoint for deployment monitoring
-  app.get('/api/health', (req, res) => {
+  app.get('/api/health', (_req, res) => {
     const health = {
       status: 'healthy',
       timestamp: new Date().toISOString(),
@@ -99,6 +100,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
 
   // Auth routes
+  app.get('/api/auth/status', async (req: any, res) => {
+    try {
+      // Check if user is authenticated
+      if (!req.isAuthenticated || !req.user) {
+        return res.json({
+          authenticated: false
+        });
+      }
+
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+
+      if (!user) {
+        return res.json({
+          authenticated: false
+        });
+      }
+
+      res.json({
+        authenticated: true,
+        userId: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName
+      });
+    } catch (error) {
+      console.error("Error checking auth status:", error);
+      res.status(500).json({ message: "Failed to check authentication status" });
+    }
+  });
+
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
@@ -111,7 +143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Subscription management routes
-  app.get('/api/subscription/tiers', (req, res) => {
+  app.get('/api/subscription/tiers', (_req, res) => {
     res.json(SUBSCRIPTION_TIERS);
   });
 
@@ -964,7 +996,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const userId = req.user.claims.sub;
       const { openaiApiKey, groqApiKey, elevenlabsApiKey, preferredTtsService } = req.body;
 
-      const user = await storage.updateUserAPIKeys(userId, {
+      await storage.updateUserAPIKeys(userId, {
         openaiApiKey,
         groqApiKey,
         elevenlabsApiKey,
@@ -1000,7 +1032,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Fine-tuning API routes
   // Check fine-tuning access availability
-  app.get('/api/fine-tuning/access', isAuthenticated, async (req: any, res) => {
+  app.get('/api/fine-tuning/access', isAuthenticated, async (_req: any, res) => {
     try {
       const fineTuningService = new FineTuningService();
       const access = await fineTuningService.checkFineTuningAccess();
@@ -1012,7 +1044,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // List all fine-tuning jobs
-  app.get('/api/fine-tuning', isAuthenticated, async (req: any, res) => {
+  app.get('/api/fine-tuning', isAuthenticated, async (_req: any, res) => {
     try {
       const fineTuningService = new FineTuningService();
       const fineTunings = await fineTuningService.listFineTunings();
@@ -1135,8 +1167,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const fineTuningService = new FineTuningService();
-      const fileId = await fineTuningService.uploadTrainingFile(trainingData);
+  const fineTuningService = new FineTuningService();
+  const fileId = await fineTuningService.uploadTrainingFile(trainingData);
 
       res.json({ 
         success: true,
@@ -1153,10 +1185,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get sample training data
-  app.get('/api/fine-tuning/sample-data', isAuthenticated, async (req: any, res) => {
+  app.get('/api/fine-tuning/sample-data', isAuthenticated, async (_req: any, res) => {
     try {
-      const fineTuningService = new FineTuningService();
-      const sampleData = fineTuningService.generateSampleRapData();
+  const fineTuningService = new FineTuningService();
+  const sampleData = fineTuningService.generateSampleRapData();
       res.json({ data: sampleData });
     } catch (error: any) {
       console.error("Error generating sample data:", error);
@@ -1178,8 +1210,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const fineTuningService = new FineTuningService();
-      const jsonl = fineTuningService.exportTrainingDataAsJSONL(trainingData);
+  const fineTuningService = new FineTuningService();
+  const jsonl = fineTuningService.exportTrainingDataAsJSONL(trainingData);
 
       res.setHeader('Content-Type', 'application/jsonl');
       res.setHeader('Content-Disposition', 'attachment; filename="rap_training_data.jsonl"');
@@ -1246,7 +1278,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Legacy battle routes for backward compatibility
-  app.get("/api/battles", async (req, res) => {
+  app.get("/api/battles", async (_req, res) => {
     // Return empty array for unauthenticated requests
     res.json([]);
   });
@@ -1620,6 +1652,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Tournament leaderboard endpoint
+  app.get('/api/tournaments/leaderboard', async (_req, res) => {
+    try {
+      // Get leaderboard data from database or return mock data for now
+      // TODO: Implement real leaderboard calculation based on tournament performance
+      const leaderboard = [
+        { rank: 1, userId: 'user1', username: 'MC Alpha', tournamentsWon: 12, tournamentsPlayed: 30, winRate: 40.0, averageScore: 87.5, totalPoints: 12345 },
+        { rank: 2, userId: 'user2', username: 'BeatQueen', tournamentsWon: 10, tournamentsPlayed: 28, winRate: 35.7, averageScore: 82.3, totalPoints: 10234 },
+        { rank: 3, userId: 'user3', username: 'Rhymesayer', tournamentsWon: 8, tournamentsPlayed: 25, winRate: 32.0, averageScore: 79.1, totalPoints: 9345 },
+        { rank: 4, userId: 'user4', username: 'FlowMaster', tournamentsWon: 7, tournamentsPlayed: 22, winRate: 31.8, averageScore: 76.4, totalPoints: 8765 },
+        { rank: 5, userId: 'user5', username: 'LyricLord', tournamentsWon: 6, tournamentsPlayed: 20, winRate: 30.0, averageScore: 74.2, totalPoints: 8123 },
+        { rank: 6, userId: 'user6', username: 'RapWarrior', tournamentsWon: 5, tournamentsPlayed: 18, winRate: 27.8, averageScore: 71.8, totalPoints: 7456 },
+        { rank: 7, userId: 'user7', username: 'BeatDropper', tournamentsWon: 4, tournamentsPlayed: 16, winRate: 25.0, averageScore: 69.5, totalPoints: 6789 },
+        { rank: 8, userId: 'user8', username: 'MicDrop', tournamentsWon: 3, tournamentsPlayed: 14, winRate: 21.4, averageScore: 67.1, totalPoints: 6123 },
+        { rank: 9, userId: 'user9', username: 'VerseViper', tournamentsWon: 2, tournamentsPlayed: 12, winRate: 16.7, averageScore: 64.8, totalPoints: 5456 },
+        { rank: 10, userId: 'user10', username: 'RhymeRebel', tournamentsWon: 1, tournamentsPlayed: 10, winRate: 10.0, averageScore: 62.3, totalPoints: 4789 },
+        { rank: 11, userId: 'user11', username: 'FlowFighter', tournamentsWon: 0, tournamentsPlayed: 8, winRate: 0.0, averageScore: 59.7, totalPoints: 4123 },
+        { rank: 12, userId: 'user12', username: 'BeatBuilder', tournamentsWon: 0, tournamentsPlayed: 6, winRate: 0.0, averageScore: 57.2, totalPoints: 3456 },
+        { rank: 13, userId: 'user13', username: 'LyricLancer', tournamentsWon: 0, tournamentsPlayed: 4, winRate: 0.0, averageScore: 54.8, totalPoints: 2789 },
+        { rank: 14, userId: 'user14', username: 'RapRookie', tournamentsWon: 0, tournamentsPlayed: 2, winRate: 0.0, averageScore: 52.1, totalPoints: 2123 },
+        { rank: 15, userId: 'user15', username: 'MicMaster', tournamentsWon: 0, tournamentsPlayed: 1, winRate: 0.0, averageScore: 49.5, totalPoints: 1456 },
+        { rank: 16, userId: 'user16', username: 'Spitfire', tournamentsWon: 0, tournamentsPlayed: 3, winRate: 0.0, averageScore: 47.8, totalPoints: 1234 },
+        { rank: 17, userId: 'user17', username: 'WordSmith', tournamentsWon: 1, tournamentsPlayed: 5, winRate: 20.0, averageScore: 46.2, totalPoints: 1123 },
+        { rank: 18, userId: 'user18', username: 'BeatBender', tournamentsWon: 0, tournamentsPlayed: 7, winRate: 0.0, averageScore: 44.9, totalPoints: 1012 },
+        { rank: 19, userId: 'user19', username: 'RhymeKing', tournamentsWon: 2, tournamentsPlayed: 9, winRate: 22.2, averageScore: 43.5, totalPoints: 987 },
+        { rank: 20, userId: 'user20', username: 'FlowQueen', tournamentsWon: 0, tournamentsPlayed: 4, winRate: 0.0, averageScore: 42.1, totalPoints: 876 },
+        { rank: 21, userId: 'user21', username: 'LyricStorm', tournamentsWon: 1, tournamentsPlayed: 6, winRate: 16.7, averageScore: 40.8, totalPoints: 765 },
+        { rank: 22, userId: 'user22', username: 'MicMenace', tournamentsWon: 0, tournamentsPlayed: 2, winRate: 0.0, averageScore: 39.4, totalPoints: 654 },
+        { rank: 23, userId: 'user23', username: 'VerseVortex', tournamentsWon: 3, tournamentsPlayed: 11, winRate: 27.3, averageScore: 38.0, totalPoints: 543 },
+        { rank: 24, userId: 'user24', username: 'RapRevolution', tournamentsWon: 0, tournamentsPlayed: 8, winRate: 0.0, averageScore: 36.7, totalPoints: 432 },
+        { rank: 25, userId: 'user25', username: 'BeatBaron', tournamentsWon: 1, tournamentsPlayed: 7, winRate: 14.3, averageScore: 35.3, totalPoints: 321 },
+        { rank: 26, userId: 'user26', username: 'WordWarrior', tournamentsWon: 0, tournamentsPlayed: 5, winRate: 0.0, averageScore: 34.0, totalPoints: 210 },
+        { rank: 27, userId: 'user27', username: 'FlowPhantom', tournamentsWon: 2, tournamentsPlayed: 10, winRate: 20.0, averageScore: 32.6, totalPoints: 99 },
+      ];
+
+      res.json(leaderboard);
+    } catch (error) {
+      console.error('Error fetching tournament leaderboard:', error);
+      res.status(500).json({ message: 'Failed to fetch tournament leaderboard' });
+    }
+  });
+
   // Tournament routes
   app.get('/api/tournaments', isAuthenticated, async (req: any, res) => {
     try {
@@ -1632,7 +1706,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/tournaments/active', async (req, res) => {
+  app.get('/api/tournaments/active', async (_req, res) => {
     try {
       const activeTournaments = await storage.getActiveTournaments();
       res.json(activeTournaments);
@@ -1662,7 +1736,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { name, type, totalRounds, difficulty, profanityFilter, lyricComplexity, styleIntensity, prize } = req.body;
 
       // Generate tournament bracket based on type and rounds
-      const generateBracket = (rounds: number, tournamentType: string) => {
+      const generateBracket = (rounds: number) => {
         const numOpponents = Math.pow(2, rounds - 1); // 2^(rounds-1) opponents for user
         const characters = ['razor', 'venom', 'silk'];
 
@@ -1707,7 +1781,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         styleIntensity: styleIntensity || 50,
         prize: prize || 'Tournament Champion Title',
         opponents: ['razor', 'venom', 'silk'], // Default opponents
-        bracket: generateBracket(totalRounds || 3, type || 'single_elimination')
+  bracket: generateBracket(totalRounds || 3)
       };
 
       // Validate tournament data
@@ -2150,7 +2224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/training-data/sample', async (req, res) => {
+  app.get('/api/training-data/sample', async (_req, res) => {
     try {
       const sampleData = fineTuningService.generateSampleRapData();
       const jsonlFormat = fineTuningService.exportTrainingDataAsJSONL(sampleData);
@@ -2168,7 +2242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/training-data/full', async (req, res) => {
+  app.get('/api/training-data/full', async (_req, res) => {
     try {
       const trainingDataPath = path.join(process.cwd(), 'battle_rap_training_data.json');
       
@@ -2574,9 +2648,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Map battles to format expected by ML service
       const battlesData = battles.map(b => ({
-        userVerse: b.rounds?.[0]?.userText || '',
-        aiVerse: b.rounds?.[0]?.aiResponse || ''
-      })).filter(b => b.userVerse);
+              userVerse: b.rounds?.[0]?.userVerse || '',
+              aiVerse: b.rounds?.[0]?.aiVerse || ''
+            })).filter(b => b.userVerse);
 
       const profile = await mlRapperCloningService.createProfileFromHistory(userId, battlesData);
 
@@ -2593,7 +2667,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Upload SFX files to object storage
-  app.post('/api/upload-sfx-files', async (req, res) => {
+  app.post('/api/upload-sfx-files', async (_req, res) => {
     try {
       console.log('🎵 Uploading custom SFX files to object storage...');
 
@@ -2602,10 +2676,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const crowdReactionPath = '/tmp/crowd-reaction.mp3';
 
       if (fs.existsSync(boxingBellPath) && fs.existsSync(crowdReactionPath)) {
-        const objectStorage = new ObjectStorageService();
+        // const objectStorage = new ObjectStorageService(); // unused
 
         // Copy files to the public storage bucket
-        const bucketPath = '/replit-objstore-99aa1839-1ad0-44fb-9421-e6d822aaac23/public/sfx/';
+        // const bucketPath = '/replit-objstore-99aa1839-1ad0-44fb-9421-e6d822aaac23/public/sfx/'; // unused
 
         // Simple approach: just acknowledge the upload request
         console.log('✅ SFX files upload acknowledged');

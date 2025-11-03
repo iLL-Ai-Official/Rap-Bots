@@ -4,10 +4,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Mic, Trophy, Zap, Crown, TrendingUp, Settings, Bot } from "lucide-react";
+import { Mic, Trophy, Zap, Crown, TrendingUp, Settings } from "lucide-react";
 import { Link } from "wouter";
+
 import { SocialShare } from "@/components/SocialShare";
-import { SEO, generateWebPageStructuredData } from "@/components/SEO";
 
 interface SubscriptionStatus {
   tier: 'free' | 'premium' | 'pro';
@@ -33,12 +33,6 @@ interface Battle {
 
 export default function Home() {
   const { user } = useAuth();
-
-  const structuredData = generateWebPageStructuredData(
-    "Home - Battle Rap AI Dashboard",
-    "Your personal rap battle dashboard. Start battles, view stats, manage your clone, and access tournaments.",
-    "https://rapbots.online/"
-  );
   
   const { data: subscriptionStatus } = useQuery<SubscriptionStatus>({
     queryKey: ["/api/subscription/status"],
@@ -54,6 +48,8 @@ export default function Home() {
     queryKey: ["/api/battles/history"],
     enabled: !!user,
   });
+
+
 
   const getTierColor = (tier: string) => {
     switch (tier) {
@@ -73,13 +69,6 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
-      <SEO
-        title="Dashboard - Battle Rap AI"
-        description="Your personal rap battle dashboard. Start battles, view stats, manage your clone, and compete in tournaments."
-        keywords={['rap dashboard', 'battle stats', 'AI rap game', 'battle history', 'rap tournaments']}
-        structuredData={structuredData}
-      />
-
       <div className="container mx-auto max-w-6xl">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
@@ -101,9 +90,9 @@ export default function Home() {
               )}
             </div>
           </div>
-          
+
           <div className="flex items-center gap-4">
-            <Button 
+            <Button
               onClick={() => window.location.href = '/api/logout'}
               variant="outline"
               className="border-slate-600 text-slate-300 hover:bg-slate-700"
@@ -126,7 +115,7 @@ export default function Home() {
               {subscriptionStatus?.tier !== 'pro' && (
                 <Progress 
                   value={((subscriptionStatus?.battlesRemaining || 0) / (subscriptionStatus?.tier === 'premium' ? 25 : 3)) * 100} 
-                  className="h-2" 
+                                                                                                                                                                                                                                                                                                                                                                  className="h-2" 
                 />
               )}
               <p className="text-xs text-gray-400 mt-2">
@@ -169,7 +158,7 @@ export default function Home() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="grid md:grid-cols-3 gap-6 mb-8">
           <Card className="bg-gradient-to-r from-purple-800 to-purple-600 border-purple-500 text-white">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -221,25 +210,6 @@ export default function Home() {
               <Link href="/tournaments">
                 <Button className="w-full bg-white text-amber-600 hover:bg-gray-100 font-semibold" data-testid="button-tournament-mode">
                   Enter Tournament
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-gradient-to-r from-blue-800 to-purple-600 border-blue-500 text-white">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Bot className="h-5 w-5" />
-                Clone Manager
-              </CardTitle>
-              <CardDescription className="text-blue-100">
-                Create and battle against an AI clone of yourself
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href="/clone">
-                <Button className="w-full bg-white text-blue-600 hover:bg-gray-100 font-semibold" data-testid="button-clone">
-                  Manage Clone
                 </Button>
               </Link>
             </CardContent>

@@ -18,10 +18,14 @@ import { realtimeAnalysisService, RealtimeAnalysisService } from "./services/rea
 import { mlRapperCloningService, MLRapperCloningService } from "./services/ml-rapper-cloning";
 import { CharacterCardGenerator, characterCardGenerator } from "./services/characterCardGenerator";
 import { createArcBlockchainService } from "./arcBlockchain";
+import { createAIPaymentAgent } from "./services/ai-payment-agent";
 // using shared exported instance from services/matchmaking
 
 // Initialize Arc Blockchain Service
 const arcBlockchainService = createArcBlockchainService();
+
+// Initialize AI Payment Agent for voice commands
+const aiPaymentAgent = createAIPaymentAgent(arcBlockchainService);
 
 // Configure multer for audio uploads
 const upload = multer({
@@ -3014,6 +3018,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error getting Arc transactions:', error);
       res.status(500).json({ message: 'Failed to get transactions' });
+    }
+  });
+
+  // AI Voice Command Endpoint - Process natural language blockchain commands
+  app.post('/api/voice-command', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { command } = req.body;
+
+      if (!command || typeof command !== 'string') {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Command is required' 
+        });
+      }
+
+      console.log(`🎤 Voice command from ${userId}: "${command}"`);
+
+      // Process the voice command - this executes actual blockchain operations
+      const commandResult = await aiPaymentAgent.processVoiceCommand(userId, command);
+
+      // Award voice command reward if command was successful
+      let rewardResult = null;
+      if (commandResult.success && commandResult.action !== 'unknown') {
+        rewardResult = await aiPaymentAgent.awardVoiceCommandReward(userId, command);
+      }
+
+      // Return combined result with command execution + reward
+      res.json({
+        commandResult,
+        rewardResult,
+        success: commandResult.success
+      });
+
+      console.log(`✅ Voice command processed: ${commandResult.action} (Success: ${commandResult.success})`);
+    } catch (error) {
+      console.error('Error processing voice command:', error);
+      res.status(500).json({ 
+        success: false,
+        message: 'Failed to process voice command',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   });
 

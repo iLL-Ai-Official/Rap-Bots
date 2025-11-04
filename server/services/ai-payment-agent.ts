@@ -114,12 +114,70 @@ export class AIPaymentAgent {
       };
     }
 
-    return {
-      success: true,
-      action: 'wager',
-      message: `Ready to bet $${amount} USDC! Creating your wager battle...`,
-      data: { wagerAmount: amount }
-    };
+    // Get user's Arc wallet
+    const walletAddress = await storage.getArcWalletAddress(userId);
+    if (!walletAddress) {
+      return {
+        success: false,
+        action: 'wager',
+        message: 'You need an Arc wallet first. Say "create wallet" to get started!',
+        error: 'No wallet found'
+      };
+    }
+
+    try {
+      // Create wager battle in storage
+      const wagerBattle = await storage.createWagerBattle(userId, amount);
+      
+      // Execute actual blockchain transaction - deposit wager to platform
+      const depositTx = await this.arcService.depositWager(
+        walletAddress,
+        amount,
+        wagerBattle.id
+      );
+
+      // Record the transaction
+      await storage.recordArcTransaction({
+        userId,
+        txHash: depositTx.txHash,
+        txType: 'wager_deposit',
+        amount,
+        fromAddress: walletAddress,
+        toAddress: 'platform',
+        status: depositTx.status,
+        blockNumber: depositTx.blockNumber,
+        gasUsedUSDC: depositTx.gasUsedUSDC,
+        memo: `Wager deposit for battle ${wagerBattle.id}`
+      });
+
+      // Update battle with transaction hash
+      await storage.updateBattleState(wagerBattle.id, {
+        wagerTxHash: depositTx.txHash
+      });
+
+      console.log(`💰 Wager battle created! Battle ID: ${wagerBattle.id}, Tx: ${depositTx.txHash}`);
+
+      return {
+        success: true,
+        action: 'wager',
+        message: `Wager battle created! You bet $${amount} USDC. Transaction confirmed on Arc blockchain!`,
+        txHash: depositTx.txHash,
+        data: { 
+          wagerAmount: amount,
+          battleId: wagerBattle.id,
+          txHash: depositTx.txHash,
+          gasUsed: depositTx.gasUsedUSDC
+        }
+      };
+    } catch (error) {
+      console.error('Error creating wager battle:', error);
+      return {
+        success: false,
+        action: 'wager',
+        message: 'Failed to create wager battle. Please try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 
   /**
@@ -181,7 +239,7 @@ export class AIPaymentAgent {
 
   /**
    * Handle transfer/send commands
-   * Examples: "send 5 USDC to winner", "transfer 10 dollars"
+   * Examples: "send 5 USDC to 0x123...", "transfer 10 dollars to platform"
    */
   private async handleTransferCommand(userId: string, command: string): Promise<VoiceCommandResult> {
     const amount = this.extractAmount(command);
@@ -195,12 +253,74 @@ export class AIPaymentAgent {
       };
     }
 
-    return {
-      success: true,
-      action: 'transfer',
-      message: `Ready to send $${amount} USDC. Who should receive it?`,
-      data: { amount }
-    };
+    // Extract recipient address from command
+    const recipient = this.extractRecipientAddress(command);
+    if (!recipient) {
+      return {
+        success: false,
+        action: 'transfer',
+        message: 'Please specify a recipient wallet address (e.g., "send 10 USDC to 0x123...")',
+        error: 'No recipient specified'
+      };
+    }
+
+    // Get user's Arc wallet
+    const fromAddress = await storage.getArcWalletAddress(userId);
+    if (!fromAddress) {
+      return {
+        success: false,
+        action: 'transfer',
+        message: 'You need an Arc wallet first. Say "create wallet" to get started!',
+        error: 'No wallet found'
+      };
+    }
+
+    try {
+      // Execute actual blockchain transfer
+      const transferTx = await this.arcService.transferUSDC({
+        fromAddress,
+        toAddress: recipient,
+        amountUSDC: amount,
+        memo: `Voice command transfer: ${command.substring(0, 50)}`
+      });
+
+      // Record the transaction
+      await storage.recordArcTransaction({
+        userId,
+        txHash: transferTx.txHash,
+        txType: 'transfer',
+        amount,
+        fromAddress,
+        toAddress: recipient,
+        status: transferTx.status,
+        blockNumber: transferTx.blockNumber,
+        gasUsedUSDC: transferTx.gasUsedUSDC,
+        memo: `Voice command transfer`
+      });
+
+      console.log(`💸 Transfer executed! $${amount} USDC sent to ${recipient.substring(0, 10)}... Tx: ${transferTx.txHash}`);
+
+      return {
+        success: true,
+        action: 'transfer',
+        message: `Successfully sent $${amount} USDC to ${recipient.substring(0, 10)}...! Transaction confirmed on Arc blockchain.`,
+        txHash: transferTx.txHash,
+        data: { 
+          amount,
+          recipient: recipient.substring(0, 10) + '...',
+          txHash: transferTx.txHash,
+          gasUsed: transferTx.gasUsedUSDC
+        }
+      };
+    } catch (error) {
+      console.error('Error executing transfer:', error);
+      return {
+        success: false,
+        action: 'transfer',
+        message: 'Failed to execute transfer. Please check your balance and try again.',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      };
+    }
   }
 
   /**
@@ -278,6 +398,29 @@ export class AIPaymentAgent {
       if (lowerText.includes(word)) {
         return amount;
       }
+    }
+
+    return null;
+  }
+
+  /**
+   * Extract recipient wallet address from natural language
+   * Handles: "to 0x123...", "send to 0xABC...", or keywords like "platform"
+   */
+  private extractRecipientAddress(text: string): string | null {
+    // Look for Ethereum-style address (0x followed by hex characters)
+    const addressPattern = /(0x[a-fA-F0-9]{40})/;
+    const match = text.match(addressPattern);
+    
+    if (match && match[1]) {
+      return match[1];
+    }
+
+    // Handle keywords for common recipients
+    const lowerText = text.toLowerCase();
+    if (lowerText.includes('platform') || lowerText.includes('house')) {
+      // Return platform wallet address
+      return process.env.ARC_PLATFORM_WALLET || "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb0";
     }
 
     return null;

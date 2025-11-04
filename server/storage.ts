@@ -116,6 +116,7 @@ export interface IStorage {
   getArcTransaction(txHash: string): Promise<ArcTransaction | undefined>;
   getUserArcTransactions(userId: string, limit?: number): Promise<ArcTransaction[]>;
   updateArcTransactionStatus(txHash: string, status: 'pending' | 'confirmed' | 'failed', confirmedAt?: Date): Promise<ArcTransaction>;
+  createWagerBattle(userId: string, wagerAmountUSDC: string): Promise<Battle>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -961,6 +962,48 @@ export class DatabaseStorage implements IStorage {
       .returning();
     
     return tx;
+  }
+
+  async createWagerBattle(userId: string, wagerAmountUSDC: string): Promise<Battle> {
+    return withRetry(
+      async () => {
+        const user = await this.getUser(userId);
+        if (!user) {
+          throw new Error("User not found");
+        }
+
+        // Get random AI character for the wager battle
+        const { getRandomCharacter } = await import("@shared/characters");
+        const aiCharacter = getRandomCharacter();
+
+        // Create wager battle with Arc blockchain integration
+        const battleData = {
+          userId,
+          userScore: 0,
+          aiScore: 0,
+          difficulty: 'normal' as const,
+          profanityFilter: false,
+          aiCharacterId: aiCharacter.id,
+          aiCharacterName: aiCharacter.name,
+          aiVoiceId: aiCharacter.voiceId,
+          rounds: [],
+          status: 'active' as const,
+          isWagerBattle: true,
+          wagerAmountUSDC,
+          isMultiplayer: false,
+        };
+
+        const [battle] = await db
+          .insert(battles)
+          .values(battleData)
+          .returning();
+
+        console.log(`💰 Created wager battle: ${battle.id} for $${wagerAmountUSDC} USDC`);
+        return battle;
+      },
+      { maxAttempts: 3 },
+      `createWagerBattle for user ${userId}`
+    );
   }
 }
 

@@ -40,6 +40,11 @@ export const battles = pgTable("battles", {
     createdAt: Date;
   }>>().notNull().default([]),
   status: text("status").notNull().default("active"),
+  // Arc Blockchain wager battling
+  isWagerBattle: boolean("is_wager_battle").notNull().default(false), // Whether this is a wager battle
+  wagerAmountUSDC: decimal("wager_amount_usdc", { precision: 20, scale: 6 }), // USDC wager amount
+  wagerTxHash: varchar("wager_tx_hash"), // Arc blockchain transaction hash for wager
+  rewardTxHash: varchar("reward_tx_hash"), // Arc blockchain transaction hash for reward payout
   createdAt: timestamp("created_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),
 });
@@ -154,11 +159,17 @@ export const users = pgTable("users", {
   rapStyle: varchar("rap_style"), // User's preferred rap style
   characterCardUrl: varchar("character_card_url"), // URL to generated character card image
   characterCardData: jsonb("character_card_data"), // Character card metadata
+  // Arc Blockchain integration
+  arcWalletAddress: varchar("arc_wallet_address"), // User's Arc L1 wallet address for USDC rewards
+  arcUsdcBalance: decimal("arc_usdc_balance", { precision: 20, scale: 6 }).default("0.000000"), // USDC balance on Arc blockchain
+  totalEarnedUSDC: decimal("total_earned_usdc", { precision: 20, scale: 6 }).default("0.000000"), // Total USDC earned from battles/tournaments
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
   // Index for Stripe webhook performance
   index("idx_users_stripe_customer_id").on(table.stripeCustomerId),
+  // Index for Arc wallet lookups
+  index("idx_users_arc_wallet").on(table.arcWalletAddress),
 ]);
 
 
@@ -192,6 +203,13 @@ export const tournaments = pgTable("tournaments", {
   prize: varchar("prize"), // What player gets for winning
   opponents: jsonb("opponents").$type<string[]>().notNull().default([]), // Array of character IDs
   bracket: jsonb("bracket").$type<TournamentBracket>().notNull(),
+  // Arc Blockchain tournament prizes
+  isPrizeTournament: boolean("is_prize_tournament").notNull().default(false), // Whether this tournament has USDC prizes
+  prizePool: decimal("prize_pool", { precision: 20, scale: 6 }), // Total USDC prize pool
+  firstPlacePrize: decimal("first_place_prize", { precision: 20, scale: 6 }), // 1st place USDC prize
+  secondPlacePrize: decimal("second_place_prize", { precision: 20, scale: 6 }), // 2nd place USDC prize
+  thirdPlacePrize: decimal("third_place_prize", { precision: 20, scale: 6 }), // 3rd place USDC prize
+  rewardTxHashes: jsonb("reward_tx_hashes").$type<Record<string, string>>(), // Map of userId -> Arc tx hash for prizes
   createdAt: timestamp("created_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),
 });
@@ -368,3 +386,71 @@ export type UserClone = typeof userClones.$inferSelect;
 export const userCloneRelations = relations(userClones, ({ one }) => ({
   user: one(users, { fields: [userClones.userId], references: [users.id] }),
 }));
+
+// Arc Blockchain transaction tracking
+export const arcTransactions = pgTable("arc_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  txHash: varchar("tx_hash").notNull().unique(), // Arc blockchain transaction hash
+  txType: varchar("tx_type").notNull(), // battle_win, tournament_prize, wager_deposit, wager_payout, voice_command
+  amount: decimal("amount", { precision: 20, scale: 6 }).notNull(), // USDC amount
+  fromAddress: varchar("from_address").notNull(),
+  toAddress: varchar("to_address").notNull(),
+  status: varchar("status").notNull().default("pending"), // pending, confirmed, failed
+  blockNumber: integer("block_number"),
+  gasUsedUSDC: decimal("gas_used_usdc", { precision: 20, scale: 6 }),
+  relatedBattleId: varchar("related_battle_id").references(() => battles.id),
+  relatedTournamentId: varchar("related_tournament_id").references(() => tournaments.id),
+  memo: text("memo"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  confirmedAt: timestamp("confirmed_at"),
+}, (table) => [
+  index("idx_arc_tx_user").on(table.userId),
+  index("idx_arc_tx_hash").on(table.txHash),
+  index("idx_arc_tx_status").on(table.status),
+]);
+
+export const insertArcTransactionSchema = createInsertSchema(arcTransactions).omit({
+  id: true,
+  createdAt: true,
+  confirmedAt: true,
+});
+
+export type InsertArcTransaction = z.infer<typeof insertArcTransactionSchema>;
+export type ArcTransaction = typeof arcTransactions.$inferSelect;
+
+// Arc Blockchain monetization configuration
+export const MONETIZATION_CONFIG = {
+  ARC_REWARDS: {
+    BATTLE_WIN_USDC: "0.10", // $0.10 USDC for winning a battle
+    TOURNAMENT_1ST: "5.00", // $5.00 USDC for 1st place
+    TOURNAMENT_2ND: "2.50", // $2.50 USDC for 2nd place
+    TOURNAMENT_3RD: "1.00", // $1.00 USDC for 3rd place
+    VOICE_COMMAND_REWARD: "0.01", // $0.01 USDC for using voice command
+  },
+  WAGER_LIMITS: {
+    MIN_WAGER_USDC: "0.50", // Minimum wager: $0.50 USDC
+    MAX_WAGER_USDC: "100.00", // Maximum wager: $100 USDC
+    PLATFORM_FEE_PERCENT: 5, // 5% platform fee on wagers
+  },
+  TOURNAMENT_PRIZE_POOLS: {
+    SMALL: {
+      total: "10.00", // $10 total prize pool
+      first: "5.00",
+      second: "3.00",
+      third: "2.00",
+    },
+    MEDIUM: {
+      total: "50.00", // $50 total prize pool
+      first: "25.00",
+      second: "15.00",
+      third: "10.00",
+    },
+    LARGE: {
+      total: "250.00", // $250 total prize pool
+      first: "150.00",
+      second: "60.00",
+      third: "40.00",
+    },
+  },
+} as const;

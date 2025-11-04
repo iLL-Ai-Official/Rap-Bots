@@ -19,6 +19,7 @@ import { mlRapperCloningService, MLRapperCloningService } from "./services/ml-ra
 import { CharacterCardGenerator, characterCardGenerator } from "./services/characterCardGenerator";
 import { createArcBlockchainService } from "./arcBlockchain";
 import { createAIPaymentAgent } from "./services/ai-payment-agent";
+import { getElevenLabsSFXService } from "./services/elevenlabs-sfx";
 // using shared exported instance from services/matchmaking
 
 // Initialize Arc Blockchain Service
@@ -26,6 +27,12 @@ const arcBlockchainService = createArcBlockchainService();
 
 // Initialize AI Payment Agent for voice commands
 const aiPaymentAgent = createAIPaymentAgent(arcBlockchainService);
+
+// Initialize ElevenLabs SFX Service
+const sfxService = getElevenLabsSFXService();
+console.log(sfxService.isServiceAvailable() 
+  ? '🔊 ElevenLabs SFX Service: AI generation enabled'
+  : 'ℹ️ ElevenLabs SFX Service: Using fallback mode (no API key)');
 
 // Configure multer for audio uploads
 const upload = multer({
@@ -81,11 +88,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
         groq: !!process.env.GROQ_API_KEY,
         openai: !!process.env.OPENAI_API_KEY,
         stripe: !!process.env.STRIPE_SECRET_KEY,
+        elevenlabs: !!process.env.ELEVENLABS_API_KEY,
       }
     };
 
     console.log('🏥 Health check:', health);
     res.json(health);
+  });
+
+  // ElevenLabs Sound Effects endpoints
+  app.get('/api/sfx/:soundType', async (req, res) => {
+    try {
+      const soundType = req.params.soundType as any;
+      
+      console.log(`🔊 SFX request: ${soundType}`);
+      
+      const audioBuffer = await sfxService.getSound(soundType);
+      
+      res.set('Content-Type', 'audio/mpeg');
+      res.set('Cache-Control', 'public, max-age=86400'); // Cache for 24 hours
+      res.send(audioBuffer);
+    } catch (error: any) {
+      console.error(`❌ SFX error for ${req.params.soundType}:`, error.message);
+      res.status(500).json({ 
+        error: 'Sound effect generation failed',
+        message: error.message 
+      });
+    }
+  });
+
+  app.post('/api/sfx/initialize', isAuthenticated, async (req: any, res) => {
+    try {
+      console.log('🎵 Initializing all battle sounds...');
+      
+      const result = await sfxService.preGenerateAllSounds();
+      const stats = sfxService.getCacheStats();
+      
+      res.json({
+        message: 'Battle sounds pre-generated successfully',
+        cached: stats.count,
+        sounds: stats.keys,
+        totalSize: `${(stats.totalSize / 1024 / 1024).toFixed(2)} MB`
+      });
+    } catch (error: any) {
+      console.error('❌ SFX initialization error:', error.message);
+      res.status(500).json({ 
+        error: 'Failed to initialize sound effects',
+        message: error.message 
+      });
+    }
   });
 
   // SFX Audio Files endpoint for serving public sound effects

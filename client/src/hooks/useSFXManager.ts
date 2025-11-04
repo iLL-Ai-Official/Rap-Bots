@@ -81,29 +81,45 @@ export function useSFXManager(): SFXManagerHook {
     initializeWebAudio();
   }, []);
 
-  // Play audio files from object storage or fallback to Web Audio API
+  // Play audio files from ElevenLabs SFX API or fallback to Web Audio API
   const playAudioFile = useCallback(async (type: string, volume: number) => {
     console.log(`🔊 Playing SFX: ${type} at volume ${volume}`);
     setIsPlaying(true);
     setCurrentlyPlaying(type);
 
-    // Try to load from object storage first
+    // Map old internal types to new ElevenLabs sound types
     let audioUrl = '';
     
     switch (type) {
       case 'round-bell':
-        audioUrl = '/api/sfx/boxing-bell.mp3';
+        audioUrl = '/api/sfx/boxing-bell';
         break;
       case 'crowd-mild':
+        audioUrl = '/api/sfx/crowd-mild';
+        break;
       case 'crowd-medium':
+        audioUrl = '/api/sfx/crowd-medium';
+        break;
       case 'crowd-wild':
-        audioUrl = '/api/sfx/crowd-reaction.mp3';
+        audioUrl = '/api/sfx/crowd-wild';
+        break;
+      case 'crowd-boo':
+        audioUrl = '/api/sfx/crowd-boo';
+        break;
+      case 'crowd-gasp':
+        audioUrl = '/api/sfx/crowd-gasp';
         break;
       case 'ending-victory':
-      case 'ending-defeat':
-      case 'ending-draw':
-        audioUrl = '/api/sfx/air-horn.mp3';
+        audioUrl = '/api/sfx/victory-fanfare';
         break;
+      case 'ending-defeat':
+        audioUrl = '/api/sfx/crowd-boo';
+        break;
+      case 'ending-draw':
+        audioUrl = '/api/sfx/air-horn';
+        break;
+      default:
+        audioUrl = '/api/sfx/crowd-medium';
     }
 
     try {

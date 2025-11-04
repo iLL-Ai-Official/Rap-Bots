@@ -394,7 +394,4 @@ MIT License - See LICENSE file for details
 
 ---
 
-**Submission Contact:** [Your Email]  
-**Demo URL:** [Replit App URL]  
-**GitHub:** [This Replit Project]  
-**Submission Date:** November 4, 2025
+

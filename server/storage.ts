@@ -26,6 +26,7 @@ import {
   type InsertUserClone,
   SUBSCRIPTION_TIERS,
 } from "@shared/schema";
+import { getCharacterById } from "@shared/characters";
 import { db, withRetry } from "./db";
 import { eq, and, gte, lt, sql, desc, count, max } from "drizzle-orm";
 import NodeCache from 'node-cache';
@@ -560,7 +561,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   generateTournamentBracket(totalRounds: number, opponents: string[]): TournamentBracket {
-    const { getCharacterById } = require("@shared/characters");
     const bracket: TournamentBracket = { rounds: [] };
 
     for (let roundNum = 1; roundNum <= totalRounds; roundNum++) {
@@ -577,12 +577,14 @@ export class DatabaseStorage implements IStorage {
 
         if (roundNum === 1 && i < opponents.length) {
           const character = getCharacterById(opponents[i]);
-          match.player2 = {
-            id: character.id,
-            name: character.name,
-            type: 'ai',
-            avatar: character.avatar,
-          };
+          if (character) {
+            match.player2 = {
+              id: character.id,
+              name: character.name,
+              type: 'ai',
+              avatar: character.avatar,
+            };
+          }
         }
 
         matches.push(match);

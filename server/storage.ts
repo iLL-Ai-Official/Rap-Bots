@@ -6,6 +6,7 @@ import {
   referrals,
   processedWebhookEvents,
   userClones,
+  arcTransactions,
   type User,
   type UpsertUser,
   type Battle,
@@ -24,7 +25,10 @@ import {
   type InsertWebhookEvent,
   type UserClone,
   type InsertUserClone,
+  type ArcTransaction,
+  type InsertArcTransaction,
   SUBSCRIPTION_TIERS,
+  MONETIZATION_CONFIG,
 } from "@shared/schema";
 import { getCharacterById } from "@shared/characters";
 import { db, withRetry } from "./db";
@@ -103,6 +107,15 @@ export interface IStorage {
   getUserClone(userId: string): Promise<UserClone | undefined>;
   createOrUpdateUserClone(userId: string): Promise<UserClone>;
   getCloneById(cloneId: string): Promise<UserClone | undefined>;
+
+  // Arc Blockchain operations
+  createArcWallet(userId: string, walletAddress: string): Promise<User>;
+  getArcWalletAddress(userId: string): Promise<string | null>;
+  updateArcBalance(userId: string, newBalance: string): Promise<User>;
+  recordArcTransaction(transaction: InsertArcTransaction): Promise<ArcTransaction>;
+  getArcTransaction(txHash: string): Promise<ArcTransaction | undefined>;
+  getUserArcTransactions(userId: string, limit?: number): Promise<ArcTransaction[]>;
+  updateArcTransactionStatus(txHash: string, status: 'pending' | 'confirmed' | 'failed', confirmedAt?: Date): Promise<ArcTransaction>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -870,6 +883,84 @@ export class DatabaseStorage implements IStorage {
       console.error('Error fetching clone by ID:', error);
       throw error;
     }
+  }
+
+  // Arc Blockchain operations
+  async createArcWallet(userId: string, walletAddress: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ 
+        arcWalletAddress: walletAddress,
+        arcUsdcBalance: "0.000000" 
+      })
+      .where(eq(users.id, userId))
+      .returning();
+    
+    console.log(`⛓️ Arc wallet created for user ${userId}: ${walletAddress.substring(0, 10)}...`);
+    return user;
+  }
+
+  async getArcWalletAddress(userId: string): Promise<string | null> {
+    const user = await this.getUser(userId);
+    return user?.arcWalletAddress || null;
+  }
+
+  async updateArcBalance(userId: string, newBalance: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({ arcUsdcBalance: newBalance })
+      .where(eq(users.id, userId))
+      .returning();
+    
+    return user;
+  }
+
+  async recordArcTransaction(transaction: InsertArcTransaction): Promise<ArcTransaction> {
+    const [tx] = await db
+      .insert(arcTransactions)
+      .values(transaction)
+      .returning();
+    
+    console.log(`⛓️ Recorded Arc transaction: ${tx.txHash.substring(0, 20)}... (${tx.txType})`);
+    return tx;
+  }
+
+  async getArcTransaction(txHash: string): Promise<ArcTransaction | undefined> {
+    const [tx] = await db
+      .select()
+      .from(arcTransactions)
+      .where(eq(arcTransactions.txHash, txHash))
+      .limit(1);
+    
+    return tx;
+  }
+
+  async getUserArcTransactions(userId: string, limit: number = 50): Promise<ArcTransaction[]> {
+    const transactions = await db
+      .select()
+      .from(arcTransactions)
+      .where(eq(arcTransactions.userId, userId))
+      .orderBy(desc(arcTransactions.createdAt))
+      .limit(limit);
+    
+    return transactions;
+  }
+
+  async updateArcTransactionStatus(
+    txHash: string, 
+    status: 'pending' | 'confirmed' | 'failed',
+    confirmedAt?: Date
+  ): Promise<ArcTransaction> {
+    const [tx] = await db
+      .update(arcTransactions)
+      .set({ 
+        status,
+        ...(confirmedAt && { confirmedAt })
+      })
+      .where(eq(arcTransactions.txHash, txHash))
+      .returning();
+    
+    return tx;
   }
 }
 

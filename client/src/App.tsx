@@ -18,7 +18,8 @@ import TournamentLeaderboard from "@/pages/tournament-leaderboard";
 import TournamentHistory from "@/pages/tournament-history";
 import TournamentBrackets from "@/pages/tournament-brackets";
 import FineTuning from "@/pages/fine-tuning";
-import Settings from "@/pages/settings";
+import Settings from "@/pages/Settings";
+import SafetyCenter from "@/pages/SafetyCenter";
 import CloneManager from "@/pages/clone-manager";
 import NotFound from "@/pages/not-found";
 import AdminPage from "@/pages/admin";
@@ -57,6 +58,7 @@ function Router() {
           <Route path="/tournament/:tournamentId/battle/:battleId" component={BattleArena} />
           <Route path="/fine-tuning" component={FineTuning} />
           <Route path="/settings" component={Settings} />
+          <Route path="/safety-center" component={SafetyCenter} />
           <Route path="/clone" component={CloneManager} />
           <Route path="/admin" component={AdminPage} />
           <Route component={NotFound} />

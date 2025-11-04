@@ -40,6 +40,7 @@ export class ArcBlockchainService {
   private config: ArcConfig;
   private demoBlockNumber = 1000000; // Simulated block number
   private platformWallet: string;
+  private storage: any; // Storage instance for spending limits
 
   constructor(config: ArcConfig = { demoMode: true }) {
     this.config = config;
@@ -54,6 +55,69 @@ export class ArcBlockchainService {
       console.log(`⛓️ Platform wallet: ${this.platformWallet.substring(0, 10)}...`);
     } else {
       console.log('⛓️ Demo mode: Arc blockchain operations simulated for development');
+    }
+  }
+
+  /**
+   * Set storage instance for spending limit checks
+   * Called after storage is initialized
+   */
+  setStorage(storage: any) {
+    this.storage = storage;
+  }
+
+  /**
+   * Check spending limits before transaction
+   * Enforces daily and per-transaction limits
+   * CRITICAL: This must be called before ANY user-initiated USDC transaction
+   */
+  async checkSpendingLimits(userId: string, amount: string): Promise<{ 
+    allowed: boolean; 
+    reason?: string; 
+    currentSpend?: string; 
+    dailyLimit?: string;
+  }> {
+    if (!this.storage) {
+      console.warn('⚠️ Storage not set - skipping spending limit check (UNSAFE!)');
+      return { allowed: true };
+    }
+
+    try {
+      const result = await this.storage.checkSpendingLimit(userId, amount);
+      
+      if (!result.allowed) {
+        console.warn(`🚫 Spending limit exceeded for user ${userId}: ${result.reason}`);
+      } else {
+        console.log(`✅ Spending limit check passed for user ${userId}: $${amount}`);
+      }
+      
+      return result;
+    } catch (error: any) {
+      console.error('❌ Error checking spending limits:', error);
+      // Fail safe: reject transaction if limit check fails
+      return {
+        allowed: false,
+        reason: 'Unable to verify spending limits',
+      };
+    }
+  }
+
+  /**
+   * Record spend in database after successful transaction
+   * CRITICAL: This must be called after ANY user-initiated USDC transaction
+   */
+  async recordSpend(userId: string, amount: string): Promise<void> {
+    if (!this.storage) {
+      console.warn('⚠️ Storage not set - cannot record spend (UNSAFE!)');
+      return;
+    }
+
+    try {
+      await this.storage.recordSpend(userId, amount);
+    } catch (error: any) {
+      console.error('❌ Error recording spend:', error);
+      // This is critical - we should alert admins if this fails
+      throw new Error('Failed to record spend - transaction may need manual review');
     }
   }
 
@@ -165,20 +229,38 @@ export class ArcBlockchainService {
   /**
    * Process wager battle deposit
    * User deposits USDC to participate in wager battle
+   * CRITICAL: Enforces spending limits before transaction
    */
   async depositWager(
+    userId: string,
     userWalletAddress: string,
     wagerAmount: string,
     battleId: string
   ): Promise<ArcTransferResult> {
-    console.log(`💰 Processing wager deposit: ${wagerAmount} USDC`);
+    console.log(`💰 Processing wager deposit: ${wagerAmount} USDC for user ${userId}`);
 
-    return this.transferUSDC({
+    // CRITICAL: Check spending limits BEFORE transaction
+    const limitCheck = await this.checkSpendingLimits(userId, wagerAmount);
+    if (!limitCheck.allowed) {
+      console.error(`🚫 Spending limit exceeded for user ${userId}: ${limitCheck.reason}`);
+      throw new Error(limitCheck.reason || 'Spending limit exceeded');
+    }
+
+    // Execute the transfer
+    const result = await this.transferUSDC({
       fromAddress: userWalletAddress,
       toAddress: this.platformWallet,
       amountUSDC: wagerAmount,
       memo: `Wager deposit - Battle ID: ${battleId}`,
     });
+
+    // CRITICAL: Record spend after successful transaction
+    if (result.status === 'confirmed') {
+      await this.recordSpend(userId, wagerAmount);
+      console.log(`✅ Spend recorded for user ${userId}: $${wagerAmount}`);
+    }
+
+    return result;
   }
 
   /**

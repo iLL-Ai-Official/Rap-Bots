@@ -117,6 +117,25 @@ export interface IStorage {
   getUserArcTransactions(userId: string, limit?: number): Promise<ArcTransaction[]>;
   updateArcTransactionStatus(txHash: string, status: 'pending' | 'confirmed' | 'failed', confirmedAt?: Date): Promise<ArcTransaction>;
   createWagerBattle(userId: string, wagerAmountUSDC: string): Promise<Battle>;
+
+  // Safety and Legal Compliance operations
+  verifyUserAge(userId: string, birthDate: Date): Promise<User>;
+  acceptToS(userId: string, version: string): Promise<User>;
+  updateSpendingLimits(userId: string, dailyLimit: string, perTxLimit: string): Promise<User>;
+  checkSpendingLimit(userId: string, amount: string): Promise<{ allowed: boolean; reason?: string; currentSpend?: string; dailyLimit?: string }>;
+  recordSpend(userId: string, amount: string): Promise<User>;
+  getUserSafetySettings(userId: string): Promise<{
+    ageVerificationStatus: string;
+    isMinor: boolean;
+    tosAcceptedAt: Date | null;
+    tosVersion: string | null;
+    dailySpendLimitUSDC: string;
+    perTxLimitUSDC: string;
+    dailySpendUsedUSDC: string;
+    moderationOptIn: boolean;
+    preferredJurisdiction: string | null;
+    ttsProvider: string;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1004,6 +1023,183 @@ export class DatabaseStorage implements IStorage {
       { maxAttempts: 3 },
       `createWagerBattle for user ${userId}`
     );
+  }
+
+  // Safety and Legal Compliance operations
+  async verifyUserAge(userId: string, birthDate: Date): Promise<User> {
+    const { isUserOfLegalAge, calculateAge } = await import("./config/legal");
+    const user = await this.getUser(userId);
+    
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const isLegalAge = isUserOfLegalAge(birthDate, user.preferredJurisdiction);
+    const age = calculateAge(birthDate);
+
+    const [updatedUser] = await db
+      .update(users)
+      .set({
+        birthDate,
+        ageVerifiedAt: new Date(),
+        ageVerificationStatus: isLegalAge ? 'verified' : 'failed',
+        isMinor: age < 18,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+
+    console.log(`🔞 Age verification for user ${userId}: ${isLegalAge ? 'VERIFIED' : 'FAILED'} (age: ${age})`);
+    return updatedUser;
+  }
+
+  async acceptToS(userId: string, version: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({
+        tosAcceptedAt: new Date(),
+        tosVersion: version,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+
+    console.log(`📜 User ${userId} accepted ToS version ${version}`);
+    return user;
+  }
+
+  async updateSpendingLimits(userId: string, dailyLimit: string, perTxLimit: string): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({
+        dailySpendLimitUSDC: dailyLimit,
+        perTxLimitUSDC: perTxLimit,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+
+    console.log(`💳 Updated spending limits for user ${userId}: daily=$${dailyLimit}, per-tx=$${perTxLimit}`);
+    return user;
+  }
+
+  async checkSpendingLimit(userId: string, amount: string): Promise<{ 
+    allowed: boolean; 
+    reason?: string; 
+    currentSpend?: string; 
+    dailyLimit?: string 
+  }> {
+    const user = await this.getUser(userId);
+    
+    if (!user) {
+      return { allowed: false, reason: "User not found" };
+    }
+
+    // Check if daily limit needs reset (past midnight)
+    const now = new Date();
+    const lastReset = user.lastSpendResetAt ? new Date(user.lastSpendResetAt) : now;
+    const hoursSinceReset = (now.getTime() - lastReset.getTime()) / (1000 * 60 * 60);
+    
+    let currentSpend = user.dailySpendUsedUSDC || "0.00";
+    
+    // Reset if more than 24 hours
+    if (hoursSinceReset >= 24) {
+      await db
+        .update(users)
+        .set({
+          dailySpendUsedUSDC: "0.00",
+          lastSpendResetAt: now,
+        })
+        .where(eq(users.id, userId));
+      currentSpend = "0.00";
+    }
+
+    const amountNum = parseFloat(amount);
+    const currentSpendNum = parseFloat(currentSpend);
+    const dailyLimitNum = parseFloat(user.dailySpendLimitUSDC || "50.00");
+    const perTxLimitNum = parseFloat(user.perTxLimitUSDC || "25.00");
+
+    // Check per-transaction limit
+    if (amountNum > perTxLimitNum) {
+      return {
+        allowed: false,
+        reason: `Transaction amount ($${amount}) exceeds per-transaction limit ($${perTxLimitNum.toFixed(2)})`,
+        currentSpend: currentSpend,
+        dailyLimit: user.dailySpendLimitUSDC || "50.00",
+      };
+    }
+
+    // Check daily limit
+    if (currentSpendNum + amountNum > dailyLimitNum) {
+      return {
+        allowed: false,
+        reason: `Would exceed daily spending limit (spent: $${currentSpend}, limit: $${dailyLimitNum.toFixed(2)})`,
+        currentSpend: currentSpend,
+        dailyLimit: user.dailySpendLimitUSDC || "50.00",
+      };
+    }
+
+    return {
+      allowed: true,
+      currentSpend: currentSpend,
+      dailyLimit: user.dailySpendLimitUSDC || "50.00",
+    };
+  }
+
+  async recordSpend(userId: string, amount: string): Promise<User> {
+    const user = await this.getUser(userId);
+    
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const currentSpend = parseFloat(user.dailySpendUsedUSDC || "0.00");
+    const amountNum = parseFloat(amount);
+    const newSpend = (currentSpend + amountNum).toFixed(6);
+
+    const [updatedUser] = await db
+      .update(users)
+      .set({
+        dailySpendUsedUSDC: newSpend,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+
+    console.log(`💸 Recorded spend for user ${userId}: $${amount} (total today: $${newSpend})`);
+    return updatedUser;
+  }
+
+  async getUserSafetySettings(userId: string): Promise<{
+    ageVerificationStatus: string;
+    isMinor: boolean;
+    tosAcceptedAt: Date | null;
+    tosVersion: string | null;
+    dailySpendLimitUSDC: string;
+    perTxLimitUSDC: string;
+    dailySpendUsedUSDC: string;
+    moderationOptIn: boolean;
+    preferredJurisdiction: string | null;
+    ttsProvider: string;
+  }> {
+    const user = await this.getUser(userId);
+    
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    return {
+      ageVerificationStatus: user.ageVerificationStatus || 'unverified',
+      isMinor: user.isMinor || false,
+      tosAcceptedAt: user.tosAcceptedAt,
+      tosVersion: user.tosVersion,
+      dailySpendLimitUSDC: user.dailySpendLimitUSDC || "50.00",
+      perTxLimitUSDC: user.perTxLimitUSDC || "25.00",
+      dailySpendUsedUSDC: user.dailySpendUsedUSDC || "0.00",
+      moderationOptIn: user.moderationOptIn !== undefined ? user.moderationOptIn : true,
+      preferredJurisdiction: user.preferredJurisdiction,
+      ttsProvider: user.ttsProvider || 'groq',
+    };
   }
 }
 

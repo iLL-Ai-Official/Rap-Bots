@@ -171,6 +171,20 @@ export const users = pgTable("users", {
   arcWalletAddress: varchar("arc_wallet_address"), // User's Arc L1 wallet address for USDC rewards
   arcUsdcBalance: decimal("arc_usdc_balance", { precision: 20, scale: 6 }).default("0.000000"), // USDC balance on Arc blockchain
   totalEarnedUSDC: decimal("total_earned_usdc", { precision: 20, scale: 6 }).default("0.000000"), // Total USDC earned from battles/tournaments
+  // Safety and Legal Compliance
+  birthDate: timestamp("birth_date"), // For age verification
+  ageVerifiedAt: timestamp("age_verified_at"), // When age was verified
+  ageVerificationStatus: varchar("age_verification_status").default("unverified"), // unverified, verified, failed
+  tosAcceptedAt: timestamp("tos_accepted_at"), // Terms of Service acceptance timestamp
+  tosVersion: varchar("tos_version"), // Which ToS version they accepted
+  preferredJurisdiction: varchar("preferred_jurisdiction"), // User's location/jurisdiction
+  ttsProvider: varchar("tts_provider").default("groq"), // Preferred TTS: 'groq' or 'elevenlabs'
+  dailySpendLimitUSDC: decimal("daily_spend_limit_usdc", { precision: 20, scale: 6 }).default("50.00"), // Max spend per day
+  perTxLimitUSDC: decimal("per_tx_limit_usdc", { precision: 20, scale: 6 }).default("25.00"), // Max spend per transaction
+  dailySpendUsedUSDC: decimal("daily_spend_used_usdc", { precision: 20, scale: 6 }).default("0.00"), // Amount spent today
+  lastSpendResetAt: timestamp("last_spend_reset_at").defaultNow(), // When daily limit resets
+  moderationOptIn: boolean("moderation_opt_in").default(true), // Use content moderation
+  isMinor: boolean("is_minor").default(false), // Flag for users under 18
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 }, (table) => [
@@ -178,6 +192,10 @@ export const users = pgTable("users", {
   index("idx_users_stripe_customer_id").on(table.stripeCustomerId),
   // Index for Arc wallet lookups
   index("idx_users_arc_wallet").on(table.arcWalletAddress),
+  // Index for age verification status
+  index("idx_users_age_verification").on(table.ageVerificationStatus),
+  // Index for minor flag
+  index("idx_users_is_minor").on(table.isMinor),
 ]);
 
 

@@ -20,6 +20,7 @@ import { CharacterCardGenerator, characterCardGenerator } from "./services/chara
 import { createArcBlockchainService } from "./arcBlockchain";
 import { createAIPaymentAgent } from "./services/ai-payment-agent";
 import { getElevenLabsSFXService } from "./services/elevenlabs-sfx";
+import { requireAgeVerification, requireToSAcceptance, checkJurisdiction } from './middleware/legal';
 // using shared exported instance from services/matchmaking
 
 // Initialize Arc Blockchain Service
@@ -223,6 +224,187 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching subscription status:", error);
       res.status(500).json({ message: "Failed to fetch subscription status" });
+    }
+  });
+
+  // Connect Arc blockchain service with storage
+  arcBlockchainService.setStorage(storage);
+
+  // Arc Wallet API Endpoints
+  app.get('/api/arc/wallet/balance', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Create wallet if doesn't exist
+      let walletAddress = user.arcWalletAddress;
+      if (!walletAddress) {
+        walletAddress = await arcBlockchainService.createWallet(userId);
+        await storage.createArcWallet(userId, walletAddress);
+      }
+
+      res.json({
+        balance: user.arcUsdcBalance || "0.00",
+        totalEarned: user.totalEarnedUSDC || "0.00",
+        walletAddress: walletAddress,
+      });
+    } catch (error: any) {
+      console.error('Error fetching Arc wallet balance:', error);
+      res.status(500).json({ error: 'Failed to fetch wallet balance' });
+    }
+  });
+
+  app.get('/api/arc/wallet/transactions', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const transactions = await storage.getUserArcTransactions(userId, 10);
+      res.json(transactions);
+    } catch (error: any) {
+      console.error('Error fetching Arc transactions:', error);
+      res.status(500).json({ error: 'Failed to fetch transactions' });
+    }
+  });
+
+  app.post('/api/arc/wallet/create', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      if (user.arcWalletAddress) {
+        return res.json({ walletAddress: user.arcWalletAddress, success: true });
+      }
+
+      const walletAddress = await arcBlockchainService.createWallet(userId);
+      await storage.createArcWallet(userId, walletAddress);
+
+      res.json({ walletAddress, success: true });
+    } catch (error: any) {
+      console.error('Error creating Arc wallet:', error);
+      res.status(500).json({ error: 'Failed to create wallet' });
+    }
+  });
+
+  app.post('/api/arc/spending/preview', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { amount } = req.body;
+
+      if (!amount || isNaN(parseFloat(amount))) {
+        return res.status(400).json({ error: 'Valid amount required' });
+      }
+
+      const limitCheck = await arcBlockchainService.checkSpendingLimits(userId, amount);
+      const fee = "0.001"; // Arc transaction fee
+      const total = (parseFloat(amount) + parseFloat(fee)).toFixed(6);
+
+      res.json({
+        amount,
+        fee,
+        total,
+        willExceedLimit: !limitCheck.allowed,
+        currentLimit: limitCheck.dailyLimit,
+        currentSpend: limitCheck.currentSpend,
+        reason: limitCheck.reason,
+      });
+    } catch (error: any) {
+      console.error('Error previewing spending:', error);
+      res.status(500).json({ error: 'Failed to preview transaction' });
+    }
+  });
+
+  // Safety and Legal Compliance Endpoints
+  app.post('/api/user/verify-age', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { birthDate } = req.body;
+
+      if (!birthDate) {
+        return res.status(400).json({ error: 'Birth date required' });
+      }
+
+      const user = await storage.verifyUserAge(userId, new Date(birthDate));
+      const { CURRENT_TOS_VERSION } = await import('./config/legal');
+      
+      // Also accept ToS if not already accepted
+      if (!user.tosAcceptedAt) {
+        await storage.acceptToS(userId, CURRENT_TOS_VERSION);
+      }
+
+      res.json({
+        verified: user.ageVerificationStatus === 'verified',
+        status: user.ageVerificationStatus,
+        isMinor: user.isMinor,
+        message: user.isMinor ? 'Age verification failed - users under 18 cannot participate' : 'Age verified successfully',
+      });
+    } catch (error: any) {
+      console.error('Error verifying age:', error);
+      res.status(500).json({ error: 'Failed to verify age' });
+    }
+  });
+
+  app.get('/api/user/safety-settings', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const settings = await storage.getUserSafetySettings(userId);
+      res.json(settings);
+    } catch (error: any) {
+      console.error('Error fetching safety settings:', error);
+      res.status(500).json({ error: 'Failed to fetch safety settings' });
+    }
+  });
+
+  app.post('/api/user/spending-limits', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { dailyLimit, perTxLimit } = req.body;
+
+      if (!dailyLimit || !perTxLimit) {
+        return res.status(400).json({ error: 'Both limits required' });
+      }
+
+      const user = await storage.updateSpendingLimits(userId, dailyLimit, perTxLimit);
+      res.json({ success: true, dailyLimit: user.dailySpendLimitUSDC, perTxLimit: user.perTxLimitUSDC });
+    } catch (error: any) {
+      console.error('Error updating spending limits:', error);
+      res.status(500).json({ error: 'Failed to update spending limits' });
+    }
+  });
+
+  app.post('/api/user/moderation-preference', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { moderationOptIn } = req.body;
+
+      const user = await storage.updateUser(userId, { moderationOptIn });
+      res.json({ success: true, moderationOptIn: user.moderationOptIn });
+    } catch (error: any) {
+      console.error('Error updating moderation preference:', error);
+      res.status(500).json({ error: 'Failed to update preference' });
+    }
+  });
+
+  app.post('/api/user/tts-provider', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { ttsProvider } = req.body;
+
+      if (!['groq', 'elevenlabs'].includes(ttsProvider)) {
+        return res.status(400).json({ error: 'Invalid TTS provider' });
+      }
+
+      const user = await storage.updateUser(userId, { ttsProvider });
+      res.json({ success: true, ttsProvider: user.ttsProvider });
+    } catch (error: any) {
+      console.error('Error updating TTS provider:', error);
+      res.status(500).json({ error: 'Failed to update TTS provider' });
     }
   });
 
@@ -3072,8 +3254,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // AI Voice Command Endpoint - Process natural language blockchain commands
-  app.post('/api/voice-command', isAuthenticated, async (req: any, res) => {
+  // AI Voice Command Endpoint - Process natural language blockchain commands (with legal compliance)
+  app.post('/api/voice-command', 
+    isAuthenticated,
+    requireAgeVerification,
+    requireToSAcceptance,
+    checkJurisdiction,
+    async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { command } = req.body;
@@ -3114,8 +3301,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create wager battle
-  app.post('/api/arc/wager-battle', isAuthenticated, async (req: any, res) => {
+  // Create wager battle (with legal compliance checks)
+  app.post('/api/arc/wager-battle', 
+    isAuthenticated,
+    requireAgeVerification,
+    requireToSAcceptance,
+    checkJurisdiction,
+    async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { wagerAmount, difficulty, opponentId } = req.body;
@@ -3132,8 +3324,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: 'No Arc wallet found. Create a wallet first.' });
       }
       
-      // Process wager deposit
+      // Process wager deposit (with spending limit enforcement)
       const depositTx = await arcBlockchainService.depositWager(
+        userId,
         walletAddress,
         wagerAmount,
         'temp_battle_id'
@@ -3259,8 +3452,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create tournament with USDC prizes
-  app.post('/api/arc/prize-tournament', isAuthenticated, async (req: any, res) => {
+  // Create tournament with USDC prizes (with legal compliance checks)
+  app.post('/api/arc/prize-tournament', 
+    isAuthenticated,
+    requireAgeVerification,
+    requireToSAcceptance,
+    checkJurisdiction,
+    async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
       const { name, prizeSize, difficulty } = req.body;

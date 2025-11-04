@@ -15,7 +15,9 @@ This project is a real-time, voice-enabled rap battle application designed for i
 The application is built with a clear separation between frontend and backend services. The UI/UX features a modern single-page application (SPA) design with React and Vite, styled responsively using Tailwind CSS, and enhanced with Framer Motion for smooth animations. Key technical implementations include real-time voice recording with instant transcription, AI-powered rap generation with adjustable difficulty and complexity levels (e.g., "paper-folded 9,393,939 times" skill with multiple rhyme schemes), profanity filtering, and a comprehensive battle scoring system that evaluates rhyme density, flow quality, and creativity. Character avatars are AI-generated and feature advanced lip-sync using ARTalk for photorealistic animations. The system also includes a robust monetization model with subscription tiers and secure payment processing via Stripe, managed with Replit Auth and a PostgreSQL database.
 
 ## Recent Changes (November 4, 2025)
-### Arc Blockchain Integration - Tournament Rewards & Wager Battling
+### 🏆 Arc Hackathon Features - AI + Blockchain for Intelligent Payments
+
+#### Arc Blockchain Integration - Tournament Rewards & Wager Battling
 - **Circle Arc L1 Integration**: Integrated Circle's Arc blockchain for USDC-based tournament rewards and wager battling
 - **USDC Wallet Management**: Automatic Arc wallet creation for users with EVM-compatible addresses
 - **Wager Battle System**: Users can bet USDC on battles ($0.50-$100 range), winner takes pot minus 5% platform fee
@@ -26,6 +28,30 @@ The application is built with a clear separation between frontend and backend se
 - **Demo Mode**: Simulated Arc operations for development; production mode ready for Circle API credentials (CIRCLE_API_KEY, CIRCLE_ENTITY_SECRET)
 - **Database Schema**: New `arcTransactions` table, Arc wallet fields on users, wager fields on battles, prize fields on tournaments
 - **API Endpoints**: RESTful endpoints for wallet management (/api/arc/wallet), wager battles (/api/arc/wager-battle), prize tournaments (/api/arc/prize-tournament)
+
+#### 🤖 AI Payment Agent - Natural Language Control
+- **Voice Command Processing**: AI agent understands natural language to automate USDC operations via voice
+  - "Bet 5 dollars on this battle" → Creates wager battle with Arc blockchain
+  - "Show my USDC balance" → Queries Arc wallet
+  - "Create tournament with 50 dollar prize" → Sets up prize tournament
+  - "Send 10 USDC to winner" → Processes Arc payment
+- **Voice Command Rewards**: Users earn $0.01 USDC for using voice commands (gamification)
+- **Natural Language Processing**: Extracts amounts, intent, and context from conversational speech
+- **Smart Command Routing**: Automatically routes to Arc blockchain operations
+
+#### 👥 Multiplayer PvP System - Real Player Tournaments
+- **Real Player vs Player**: Full PvP support, not just human vs AI
+- **Random Matchmaking Queue**: Players matched by skill rating (ELO system)
+- **Hybrid Matchmaking**: Real players first, AI opponents as fallback when no humans available
+- **Smart Tournament Timing**: 
+  - 2-minute turn limits by default (fair but not rushed)
+  - 5-minute match limits for tournaments
+  - Battle pause feature (life happens! - up to 1 hour)
+  - Auto-timeout protection with grace periods
+- **Multiplayer Tournaments**: Up to 8 players, single elimination with USDC prizes
+- **Skill-Based Matching**: Max 200 ELO difference for fair matches
+- **Queue Management**: 5-minute queue timeout, automatic AI fill-in for empty slots
+- **Database Tables**: `matchmaking_queue` for real-time player matching
 
 ### Previous Updates (September 5, 2025)
 #### Stripe Webhook Improvements

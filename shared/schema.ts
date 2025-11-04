@@ -45,6 +45,14 @@ export const battles = pgTable("battles", {
   wagerAmountUSDC: decimal("wager_amount_usdc", { precision: 20, scale: 6 }), // USDC wager amount
   wagerTxHash: varchar("wager_tx_hash"), // Arc blockchain transaction hash for wager
   rewardTxHash: varchar("reward_tx_hash"), // Arc blockchain transaction hash for reward payout
+  // Multiplayer PvP support
+  isMultiplayer: boolean("is_multiplayer").notNull().default(false), // PvP battle vs real player
+  opponentUserId: varchar("opponent_user_id"), // Real player opponent ID
+  opponentScore: integer("opponent_score").default(0), // Opponent's score in PvP
+  turnTimeLimit: integer("turn_time_limit").default(120), // Seconds per turn (2 minutes default)
+  lastTurnAt: timestamp("last_turn_at"), // Last turn timestamp for timeout tracking
+  isPaused: boolean("is_paused").default(false), // Battle paused (life happens!)
+  pausedAt: timestamp("paused_at"), // When battle was paused
   createdAt: timestamp("created_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),
 });
@@ -210,6 +218,12 @@ export const tournaments = pgTable("tournaments", {
   secondPlacePrize: decimal("second_place_prize", { precision: 20, scale: 6 }), // 2nd place USDC prize
   thirdPlacePrize: decimal("third_place_prize", { precision: 20, scale: 6 }), // 3rd place USDC prize
   rewardTxHashes: jsonb("reward_tx_hashes").$type<Record<string, string>>(), // Map of userId -> Arc tx hash for prizes
+  // Multiplayer PvP tournaments
+  isMultiplayer: boolean("is_multiplayer").notNull().default(false), // PvP tournament with real players
+  maxPlayers: integer("max_players").default(8), // Max players (8 for single elimination)
+  registeredPlayers: jsonb("registered_players").$type<string[]>().default([]), // Array of registered user IDs
+  matchTimeLimit: integer("match_time_limit").default(300), // Seconds per match (5 minutes default)
+  allowAIFillIn: boolean("allow_ai_fill_in").notNull().default(true), // Use AI to fill empty slots
   createdAt: timestamp("created_at").notNull().defaultNow(),
   completedAt: timestamp("completed_at"),
 });
@@ -419,6 +433,34 @@ export const insertArcTransactionSchema = createInsertSchema(arcTransactions).om
 export type InsertArcTransaction = z.infer<typeof insertArcTransactionSchema>;
 export type ArcTransaction = typeof arcTransactions.$inferSelect;
 
+// Multiplayer matchmaking queue
+export const matchmakingQueue = pgTable("matchmaking_queue", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  queueType: varchar("queue_type").notNull(), // "casual", "ranked", "wager", "tournament"
+  wagerAmount: decimal("wager_amount", { precision: 20, scale: 6 }), // For wager matches
+  skillRating: integer("skill_rating").default(1000), // ELO-style rating for matchmaking
+  status: varchar("status").notNull().default("waiting"), // waiting, matched, expired
+  matchedWithUserId: varchar("matched_with_user_id"), // Opponent user ID when matched
+  battleId: varchar("battle_id").references(() => battles.id), // Created battle ID
+  joinedAt: timestamp("joined_at").notNull().defaultNow(),
+  expiresAt: timestamp("expires_at").notNull(), // Queue expires after 5 minutes
+  matchedAt: timestamp("matched_at"),
+}, (table) => [
+  index("idx_matchmaking_status").on(table.status),
+  index("idx_matchmaking_queue_type").on(table.queueType),
+  index("idx_matchmaking_user").on(table.userId),
+]);
+
+export const insertMatchmakingQueueSchema = createInsertSchema(matchmakingQueue).omit({
+  id: true,
+  joinedAt: true,
+  matchedAt: true,
+});
+
+export type InsertMatchmakingQueue = z.infer<typeof insertMatchmakingQueueSchema>;
+export type MatchmakingQueueEntry = typeof matchmakingQueue.$inferSelect;
+
 // Arc Blockchain monetization configuration
 export const MONETIZATION_CONFIG = {
   ARC_REWARDS: {
@@ -452,5 +494,12 @@ export const MONETIZATION_CONFIG = {
       second: "60.00",
       third: "40.00",
     },
+  },
+  MATCHMAKING: {
+    QUEUE_TIMEOUT_SECONDS: 300, // 5 minutes max wait
+    MAX_SKILL_DIFF: 200, // Max ELO difference for matching
+    TURN_TIME_LIMIT: 120, // 2 minutes per turn default
+    TOURNAMENT_MATCH_LIMIT: 300, // 5 minutes per tournament match
+    PAUSE_TIME_LIMIT: 3600, // 1 hour max pause time
   },
 } as const;

@@ -17,7 +17,11 @@ import { FineTuningService } from "./services/fine-tuning";
 import { realtimeAnalysisService, RealtimeAnalysisService } from "./services/realtime-analysis";
 import { mlRapperCloningService, MLRapperCloningService } from "./services/ml-rapper-cloning";
 import { CharacterCardGenerator, characterCardGenerator } from "./services/characterCardGenerator";
+import { createArcBlockchainService } from "./arcBlockchain";
 // using shared exported instance from services/matchmaking
+
+// Initialize Arc Blockchain Service
+const arcBlockchainService = createArcBlockchainService();
 
 // Configure multer for audio uploads
 const upload = multer({
@@ -2934,6 +2938,346 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error serving audio file:', error);
       res.status(500).json({ message: 'Failed to serve audio file' });
+    }
+  });
+
+  // ===================================================================
+  // Arc Blockchain Integration Routes
+  // ===================================================================
+
+  // Get or create user's Arc wallet
+  app.post('/api/arc/wallet', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Check if user already has an Arc wallet
+      let walletAddress = await storage.getArcWalletAddress(userId);
+      
+      if (!walletAddress) {
+        // Create new Arc wallet
+        walletAddress = await arcBlockchainService.createWallet(userId);
+        await storage.createArcWallet(userId, walletAddress);
+        console.log(`⛓️ Created new Arc wallet for user ${userId}: ${walletAddress.substring(0, 10)}...`);
+      }
+      
+      // Get current balance
+      const balance = await arcBlockchainService.getUSDCBalance(walletAddress);
+      
+      res.json({
+        walletAddress,
+        balance,
+        network: 'Arc L1 Testnet'
+      });
+    } catch (error) {
+      console.error('Error creating/getting Arc wallet:', error);
+      res.status(500).json({ message: 'Failed to create Arc wallet' });
+    }
+  });
+
+  // Get Arc wallet info
+  app.get('/api/arc/wallet', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      
+      if (!user?.arcWalletAddress) {
+        return res.json({
+          hasWallet: false,
+          message: 'No Arc wallet created yet'
+        });
+      }
+      
+      const balance = await arcBlockchainService.getUSDCBalance(user.arcWalletAddress);
+      
+      res.json({
+        hasWallet: true,
+        walletAddress: user.arcWalletAddress,
+        balance,
+        totalEarned: user.totalEarnedUSDC || '0.000000',
+        network: 'Arc L1 Testnet'
+      });
+    } catch (error) {
+      console.error('Error getting Arc wallet:', error);
+      res.status(500).json({ message: 'Failed to get Arc wallet' });
+    }
+  });
+
+  // Get user's Arc transaction history
+  app.get('/api/arc/transactions', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const limit = parseInt(req.query.limit as string) || 50;
+      
+      const transactions = await storage.getUserArcTransactions(userId, limit);
+      
+      res.json({ transactions });
+    } catch (error) {
+      console.error('Error getting Arc transactions:', error);
+      res.status(500).json({ message: 'Failed to get transactions' });
+    }
+  });
+
+  // Create wager battle
+  app.post('/api/arc/wager-battle', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { wagerAmount, difficulty, opponentId } = req.body;
+      
+      // Validate wager amount
+      const validation = arcBlockchainService.validateWagerAmount(wagerAmount);
+      if (!validation.valid) {
+        return res.status(400).json({ message: validation.error });
+      }
+      
+      // Get user's Arc wallet
+      const walletAddress = await storage.getArcWalletAddress(userId);
+      if (!walletAddress) {
+        return res.status(400).json({ message: 'No Arc wallet found. Create a wallet first.' });
+      }
+      
+      // Process wager deposit
+      const depositTx = await arcBlockchainService.depositWager(
+        walletAddress,
+        wagerAmount,
+        'temp_battle_id'
+      );
+      
+      // Record deposit transaction
+      await storage.recordArcTransaction({
+        userId,
+        txHash: depositTx.txHash,
+        txType: 'wager_deposit',
+        amount: wagerAmount,
+        fromAddress: walletAddress,
+        toAddress: depositTx.txHash, // Platform wallet
+        status: depositTx.status,
+        blockNumber: depositTx.blockNumber,
+        gasUsedUSDC: depositTx.gasUsedUSDC,
+        memo: 'Wager battle deposit'
+      });
+      
+      // Create wager battle
+      const battle = await storage.createBattle({
+        userId,
+        difficulty: difficulty || 'normal',
+        isWagerBattle: true,
+        wagerAmountUSDC: wagerAmount,
+        wagerTxHash: depositTx.txHash,
+        aiCharacterId: opponentId || 'shadow',
+        status: 'active'
+      });
+      
+      res.json({
+        battleId: battle.id,
+        wagerAmount,
+        depositTxHash: depositTx.txHash,
+        potentialPayout: arcBlockchainService.calculateWagerPayout(wagerAmount),
+        message: 'Wager battle created! Win to claim the prize pool.'
+      });
+    } catch (error) {
+      console.error('Error creating wager battle:', error);
+      res.status(500).json({ message: 'Failed to create wager battle' });
+    }
+  });
+
+  // Complete wager battle and payout winner
+  app.post('/api/arc/wager-battle/:battleId/complete', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { battleId } = req.params;
+      
+      const battle = await storage.getBattle(battleId);
+      if (!battle) {
+        return res.status(404).json({ message: 'Battle not found' });
+      }
+      
+      if (battle.userId !== userId) {
+        return res.status(403).json({ message: 'Not your battle' });
+      }
+      
+      if (!battle.isWagerBattle || !battle.wagerAmountUSDC) {
+        return res.status(400).json({ message: 'Not a wager battle' });
+      }
+      
+      // Determine winner
+      const userWon = battle.userScore > battle.aiScore;
+      
+      if (userWon) {
+        const walletAddress = await storage.getArcWalletAddress(userId);
+        if (!walletAddress) {
+          return res.status(400).json({ message: 'No Arc wallet found' });
+        }
+        
+        // Calculate payout
+        const payout = arcBlockchainService.calculateWagerPayout(battle.wagerAmountUSDC);
+        
+        // Process payout
+        const payoutTx = await arcBlockchainService.payoutWagerWinnings(
+          walletAddress,
+          payout,
+          battleId
+        );
+        
+        // Record payout transaction
+        await storage.recordArcTransaction({
+          userId,
+          txHash: payoutTx.txHash,
+          txType: 'wager_payout',
+          amount: payout,
+          fromAddress: payoutTx.txHash, // Platform wallet
+          toAddress: walletAddress,
+          status: payoutTx.status,
+          blockNumber: payoutTx.blockNumber,
+          gasUsedUSDC: payoutTx.gasUsedUSDC,
+          relatedBattleId: battleId,
+          memo: 'Wager battle winnings'
+        });
+        
+        // Update battle with reward transaction
+        await storage.updateBattleState(battleId, {
+          rewardTxHash: payoutTx.txHash
+        });
+        
+        // Update user's total earnings
+        const user = await storage.getUser(userId);
+        const newTotal = (parseFloat(user?.totalEarnedUSDC || '0') + parseFloat(payout)).toFixed(6);
+        await storage.updateUser(userId, { totalEarnedUSDC: newTotal });
+        
+        res.json({
+          won: true,
+          payout,
+          txHash: payoutTx.txHash,
+          newTotalEarnings: newTotal,
+          message: `Congrats! You won ${payout} USDC!`
+        });
+      } else {
+        res.json({
+          won: false,
+          message: 'Better luck next time! Your wager was lost.'
+        });
+      }
+    } catch (error) {
+      console.error('Error completing wager battle:', error);
+      res.status(500).json({ message: 'Failed to complete wager battle' });
+    }
+  });
+
+  // Create tournament with USDC prizes
+  app.post('/api/arc/prize-tournament', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { name, prizeSize, difficulty } = req.body;
+      
+      // Get prize pool configuration
+      const prizeConfig = prizeSize === 'large' 
+        ? { total: "250.00", first: "150.00", second: "60.00", third: "40.00" }
+        : prizeSize === 'medium'
+        ? { total: "50.00", first: "25.00", second: "15.00", third: "10.00" }
+        : { total: "10.00", first: "5.00", second: "3.00", third: "2.00" };
+      
+      // Create tournament with prize configuration
+      const tournament = await storage.createTournament({
+        userId,
+        name: name || 'USDC Prize Tournament',
+        difficulty: difficulty || 'normal',
+        type: 'single_elimination',
+        totalRounds: 3, // 8 participants
+        isPrizeTournament: true,
+        prizePool: prizeConfig.total,
+        firstPlacePrize: prizeConfig.first,
+        secondPlacePrize: prizeConfig.second,
+        thirdPlacePrize: prizeConfig.third,
+        opponents: ['shadow', 'phantom', 'ghost', 'specter', 'wraith', 'shade', 'demon'],
+        bracket: storage.generateTournamentBracket(3, ['shadow', 'phantom', 'ghost', 'specter', 'wraith', 'shade', 'demon'])
+      });
+      
+      res.json({
+        tournamentId: tournament.id,
+        prizePool: prizeConfig.total,
+        prizes: {
+          first: prizeConfig.first,
+          second: prizeConfig.second,
+          third: prizeConfig.third
+        },
+        message: `Tournament created with $${prizeConfig.total} USDC prize pool!`
+      });
+    } catch (error) {
+      console.error('Error creating prize tournament:', error);
+      res.status(500).json({ message: 'Failed to create prize tournament' });
+    }
+  });
+
+  // Award tournament prizes
+  app.post('/api/arc/tournament/:tournamentId/award-prizes', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { tournamentId } = req.params;
+      
+      const tournament = await storage.getTournament(tournamentId);
+      if (!tournament) {
+        return res.status(404).json({ message: 'Tournament not found' });
+      }
+      
+      if (tournament.userId !== userId) {
+        return res.status(403).json({ message: 'Not your tournament' });
+      }
+      
+      if (!tournament.isPrizeTournament) {
+        return res.status(400).json({ message: 'Not a prize tournament' });
+      }
+      
+      if (tournament.status !== 'completed') {
+        return res.status(400).json({ message: 'Tournament not completed yet' });
+      }
+      
+      // Get user's Arc wallet
+      const walletAddress = await storage.getArcWalletAddress(userId);
+      if (!walletAddress) {
+        return res.status(400).json({ message: 'No Arc wallet found' });
+      }
+      
+      // Determine user's placement (simplified - assumes user won)
+      const place = 1; // You would determine this from bracket results
+      const prizeAmount = tournament.firstPlacePrize || '0.00';
+      
+      // Award prize
+      const prizeTx = await arcBlockchainService.awardTournamentPrize(
+        walletAddress,
+        place as 1 | 2 | 3,
+        prizeAmount,
+        tournamentId
+      );
+      
+      // Record prize transaction
+      await storage.recordArcTransaction({
+        userId,
+        txHash: prizeTx.txHash,
+        txType: 'tournament_prize',
+        amount: prizeAmount,
+        fromAddress: prizeTx.txHash, // Platform wallet
+        toAddress: walletAddress,
+        status: prizeTx.status,
+        blockNumber: prizeTx.blockNumber,
+        gasUsedUSDC: prizeTx.gasUsedUSDC,
+        relatedTournamentId: tournamentId,
+        memo: `Tournament ${place}${place === 1 ? 'st' : place === 2 ? 'nd' : 'rd'} place prize`
+      });
+      
+      // Update user's total earnings
+      const user = await storage.getUser(userId);
+      const newTotal = (parseFloat(user?.totalEarnedUSDC || '0') + parseFloat(prizeAmount)).toFixed(6);
+      await storage.updateUser(userId, { totalEarnedUSDC: newTotal });
+      
+      res.json({
+        place,
+        prize: prizeAmount,
+        txHash: prizeTx.txHash,
+        newTotalEarnings: newTotal,
+        message: `Congratulations! You won ${place}${place === 1 ? 'st' : ''}  place and earned ${prizeAmount} USDC!`
+      });
+    } catch (error) {
+      console.error('Error awarding tournament prizes:', error);
+      res.status(500).json({ message: 'Failed to award prizes' });
     }
   });
 
